@@ -1,0 +1,31 @@
+export const colors = {
+  bg: '#F3EFE6',
+  ink: '#1C1915',
+  muted: '#6F675C',
+  card: '#FFFCF7',
+  line: '#E4DCCF',
+  teal: '#0E6B5C',
+  tealSoft: '#E5F3EF',
+  green: '#1B6A4C',
+  greenSoft: '#E6F4EA',
+  clay: '#C4622D',
+  claySoft: '#F8E6D8',
+  navy: '#243E73',
+  navySoft: '#E4EAF6',
+  danger: '#A33B32',
+  dangerSoft: '#F8E4E1',
+  success: '#1E7A46',
+  warning: '#B9770E',
+  warningSoft: '#F8EED9',
+  white: '#FFFFFF',
+  scrim: 'rgba(28, 25, 21, 0.55)',
+  camera: '#10110F',
+};
+
+export const shadow = {
+  shadowColor: '#1C1915',
+  shadowOffset: { width: 0, height: 8 },
+  shadowOpacity: 0.08,
+  shadowRadius: 16,
+  elevation: 3,
+};

@@ -1,0 +1,59 @@
+{
+  "expo": {
+    "name": "Inven Go",
+    "slug": "inven-go",
+    "version": "1.1.0",
+    "orientation": "portrait",
+    "icon": "./logo/Invengo-logo.png",
+    "userInterfaceStyle": "light",
+    "scheme": "inventory",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.yuan.invengo",
+      "adaptiveIcon": {
+        "foregroundImage": "./logo/Invengo-logo-adaptive.png",
+        "backgroundColor": "#FAF7F2",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-sharing",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "允许 Inven Go 使用相机扫描商品条形码",
+          "microphonePermission": "Inven Go 不需要使用麦克风",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./logo/Invengo-logo.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#FAF7F2"
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8064a319-0d4e-4a8a-8706-b035d7df25de"
+      }
+    }
+  }
+}
