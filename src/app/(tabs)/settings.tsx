@@ -3,7 +3,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Sharing from 'expo-sharing';
 import * as Clipboard from 'expo-clipboard';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -69,6 +69,17 @@ export default function SettingsScreen() {
       setSnapshotsLoading(false);
     }
   }, []);
+
+  /**
+   * 进入设置页（含冷启动首次进入）与每次重新聚焦时都同步一次快照列表。
+   * 否则冷启动后「导出」弹窗里的份数会一直显示 0，必须先打开「导入」弹窗才会被带出来。
+   * useFocusEffect 在页面首次获得焦点时同样会执行，因此无需再补一个 useEffect。
+   */
+  useFocusEffect(
+    useCallback(() => {
+      void refreshSnapshots();
+    }, [refreshSnapshots]),
+  );
 
   /**
    * 导出前的统一时序：先提交「导出」日志并落盘，拿到持久化后的完整快照，
@@ -291,6 +302,8 @@ export default function SettingsScreen() {
       onPress: () => {
         setNotice(null);
         setExportOpen(true);
+        // 打开弹窗前再刷新一次，确保展示给用户的份数是实时的。
+        void refreshSnapshots();
       },
     },
     {

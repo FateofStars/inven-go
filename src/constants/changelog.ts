@@ -20,6 +20,14 @@ export type ChangelogEntry = {
 
 export const CHANGELOG_DATA: ChangelogEntry[] = [
   {
+    version: '1.1.2',
+    items: ['修复冷启动后「导出数据库」弹窗中本机快照份数始终显示为 0 的问题'],
+  },
+  {
+    version: '1.1.1',
+    items: ['关于页新增「获取最新发布」入口，可直达 GitHub Release 页面'],
+  },
+  {
     version: '1.1.0',
     items: [
       '新增「更新日志」页面，可在「关于」页查看历史版本更新',

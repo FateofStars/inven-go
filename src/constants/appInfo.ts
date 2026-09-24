@@ -5,7 +5,7 @@
  * `getAppVersion()`，不要各写各的字面量，未来发版只改这一处即可。
  */
 
-const APP_VERSION = 'v1.1.0';
+const APP_VERSION = 'v1.1.2';
 
 export function getAppVersion(): string {
   return APP_VERSION;
