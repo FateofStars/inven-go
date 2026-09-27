@@ -85,11 +85,14 @@ export function parseDatabase(raw: string): InventoryDatabase | null {
     if (!data || typeof data !== 'object') return null;
     const record = data as Record<string, unknown>;
     if (!Array.isArray(record.products) || !Array.isArray(record.logs)) return null;
-    return {
+    const parsed: InventoryDatabase = {
       version: 1,
       products: record.products.map(readProduct).filter((product): product is Product => product !== null),
       logs: record.logs.map(readLog).filter((entry): entry is LogEntry => entry !== null),
     };
+    // 旧版备份没有这个字段，只在明确传入布尔值时才保留，避免污染老文件语义。
+    if (typeof record.includeLogs === 'boolean') parsed.includeLogs = record.includeLogs;
+    return parsed;
   } catch {
     return null;
   }

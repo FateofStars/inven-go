@@ -16,6 +16,7 @@ const tone: Record<LogType, { color: string; soft: string; icon: keyof typeof Ma
   delete: { color: colors.danger, soft: colors.dangerSoft, icon: 'trash-can-outline' },
   import: { color: colors.navy, soft: colors.navySoft, icon: 'database-import-outline' },
   export: { color: colors.warning, soft: colors.warningSoft, icon: 'database-export-outline' },
+  barcode: { color: colors.green, soft: colors.greenSoft, icon: 'barcode' },
 };
 
 type TimeRange = 'all' | 'today' | 'week' | 'month';
@@ -26,6 +27,7 @@ const typeOptions: { key: LogType | 'all'; label: string }[] = [
   { key: 'outbound', label: '出库' },
   { key: 'create', label: '新增' },
   { key: 'delete', label: '删除' },
+  { key: 'barcode', label: '条码更新' },
   { key: 'export', label: '导出' },
   { key: 'import', label: '导入' },
 ];
@@ -200,7 +202,7 @@ export default function LogsScreen() {
             <View style={styles.empty}>
               <MaterialCommunityIcons name="clipboard-text-clock-outline" size={42} color={colors.muted} />
               <Text style={styles.emptyTitle}>还没有操作记录</Text>
-              <Text style={styles.emptyText}>入库、出库、新增、删除以及导入导出会出现在这里。</Text>
+              <Text style={styles.emptyText}>入库、出库、新增、删除、条码更新以及导入导出会出现在这里。</Text>
             </View>
           )
         }

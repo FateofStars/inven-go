@@ -24,7 +24,12 @@ export function ToastBar({ message, tone, actionHint, onPress, bottom }: ToastBa
     <Pressable
       accessibilityRole={onPress ? 'button' : 'text'}
       onPress={onPress}
-      style={[styles.bar, { backgroundColor: palette.background, bottom }]}
+      style={({ pressed }) => [
+        styles.bar,
+        { backgroundColor: palette.background, bottom },
+        // 只有可点击的提示条才给按压反馈，纯提示不该有「按得动」的错觉。
+        pressed && onPress ? styles.pressed : null,
+      ]}
     >
       <View style={styles.copy}>
         <Text style={[styles.message, { color: palette.label }]}>{message}</Text>
@@ -46,6 +51,9 @@ const styles = StyleSheet.create({
   },
   copy: {
     gap: 4,
+  },
+  pressed: {
+    opacity: 0.8,
   },
   message: {
     fontSize: 15,

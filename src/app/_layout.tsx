@@ -1,6 +1,7 @@
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { InventoryProvider, useInventory } from '@/context/InventoryContext';
 import { colors } from '@/theme';
@@ -37,14 +38,20 @@ function RootNavigator() {
 
 export default function RootLayout() {
   return (
-    <InventoryProvider>
-      <StatusBar style="dark" />
-      <RootNavigator />
-    </InventoryProvider>
+    // 商品详情页的条码左滑操作依赖手势系统，安卓必须在根部提供 GestureHandlerRootView。
+    <GestureHandlerRootView style={styles.root}>
+      <InventoryProvider>
+        <StatusBar style="dark" />
+        <RootNavigator />
+      </InventoryProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   loading: {
     flex: 1,
     alignItems: 'center',

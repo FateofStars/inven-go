@@ -5,10 +5,15 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddProductModal, type ProductSelection } from '@/components/AddProductModal';
+import { QuantitySheet } from '@/components/QuantitySheet';
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
 import { useInventory } from '@/context/InventoryContext';
+import { BARCODE_TYPES } from '@/lib/barcode';
 import type { Product } from '@/lib/types';
 import { colors } from '@/theme';
+
+/** 全局死锁时长：任意条码触发后 3 秒内忽略全部扫码事件。 */
+const SCAN_LOCK_MS = 3000;
 
 type ScanMode = 'inbound' | 'outbound' | 'query';
 
@@ -17,7 +22,11 @@ type Composer = {
   query: string;
   name: string;
   selection: ProductSelection;
+  quantity: number;
 };
+
+/** 入库命中后可点开补录数量的目标商品。 */
+type BulkTarget = { productId: string; name: string };
 
 type ToastState = {
   id: number;
@@ -25,7 +34,10 @@ type ToastState = {
   tone: ToastTone;
   sticky?: boolean;
   actionHint?: string;
+  /** 无此商品时：点击提示条进入添加商品表单。 */
   barcode?: string;
+  /** 入库成功时：点击提示条进入数量补录面板。 */
+  bulk?: BulkTarget;
 };
 
 const titles: Record<ScanMode, string> = {
@@ -35,8 +47,8 @@ const titles: Record<ScanMode, string> = {
 };
 
 const hints: Record<ScanMode, string> = {
-  inbound: '连续扫描。已有商品会直接加库存。',
-  outbound: '连续扫描。匹配后库存减 1，不会低于 0。',
+  inbound: '连续扫描，每次触发后冷却 3 秒。已有商品会直接加库存。',
+  outbound: '连续扫描，每次触发后冷却 3 秒。匹配后库存减 1，不会低于 0。',
   query: '扫到商品后会暂停，并显示库存卡片。',
 };
 
@@ -50,15 +62,19 @@ export default function ScanScreen() {
   const mode: ScanMode = rawMode && isScanMode(rawMode) ? rawMode : 'inbound';
   const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
-  const { products, inboundScan, outboundScan, findByBarcode, createProduct, bindBarcode } = useInventory();
+  const { products, inboundScan, outboundScan, findByBarcode, createProduct, bindBarcode, adjustStock } = useInventory();
   const [torch, setTorch] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [composer, setComposer] = useState<Composer | null>(null);
+  const [bulk, setBulk] = useState<BulkTarget | null>(null);
+  const [bulkQuantity, setBulkQuantity] = useState(1);
+  const [applying, setApplying] = useState(false);
   const [rescanning, setRescanning] = useState(false);
   const [queryHit, setQueryHit] = useState<{ product: Product; barcode: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const lockRef = useRef<{ code: string; at: number }>({ code: '', at: 0 });
+  const lockRef = useRef(false);
+  const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastId = useRef(0);
 
   useEffect(() => {
@@ -72,25 +88,44 @@ export default function ScanScreen() {
     setToast({ ...next, id: toastId.current });
   };
 
-  const acceptScan = (code: string) => {
-    const now = Date.now();
-    if (lockRef.current.code === code && now - lockRef.current.at < 1400) return false;
-    lockRef.current = { code, at: now };
+  /** 立刻上锁并开始 3 秒倒计时，倒计时结束自动解锁。 */
+  const lockScan = () => {
+    lockRef.current = true;
+    if (lockTimer.current) clearTimeout(lockTimer.current);
+    lockTimer.current = setTimeout(() => {
+      lockRef.current = false;
+      lockTimer.current = null;
+    }, SCAN_LOCK_MS);
+  };
+
+  /** 用户主动要求重新扫描时提前解锁，不必等满 3 秒。 */
+  const releaseScanLock = () => {
+    if (lockTimer.current) clearTimeout(lockTimer.current);
+    lockTimer.current = null;
+    lockRef.current = false;
+  };
+
+  /**
+   * 全局死锁：只要有一次扫码被受理，3 秒内拦截**所有**后续扫码事件。
+   * 不再按条码区分，因为摄像头对同一个条码的回调频率不稳定，按条码加锁仍会漏掉重复计数。
+   */
+  const acceptScan = () => {
+    if (lockRef.current) return false;
+    lockScan();
     return true;
   };
 
   const onBarcodeScanned = (result: BarcodeScanningResult) => {
     const code = result.data.trim();
     if (!code) return;
+    if (!acceptScan()) return;
     if (composer && rescanning) {
-      if (!acceptScan(code)) return;
       setComposer((current) => (current ? { ...current, barcode: code } : current));
       setRescanning(false);
       showToast({ message: '条码已填入', tone: 'info' });
       return;
     }
     if (composer || queryHit) return;
-    if (!acceptScan(code)) return;
 
     if (mode === 'inbound') {
       void inboundScan(code).then((scan) => {
@@ -104,7 +139,13 @@ export default function ScanScreen() {
           });
           return;
         }
-        showToast({ message: `添加成功 · ${scan.product.name} 库存 ${scan.product.stock}`, tone: 'success' });
+        showToast({
+          message: `添加成功 · ${scan.product.name} 库存 ${scan.product.stock}`,
+          tone: 'success',
+          sticky: true,
+          actionHint: '点击可修改本次入库数量',
+          bulk: { productId: scan.product.id, name: scan.product.name },
+        });
       });
       return;
     }
@@ -137,7 +178,50 @@ export default function ScanScreen() {
     setToast(null);
     setFormError(null);
     setRescanning(false);
-    setComposer({ barcode, query: '', name: '', selection: null });
+    setComposer({ barcode, query: '', name: '', selection: null, quantity: 1 });
+  };
+
+  const openBulkSheet = (target: BulkTarget) => {
+    setToast(null);
+    setBulkQuantity(1);
+    setBulk(target);
+  };
+
+  /** 提示条只有一个入口：无此商品去添加，入库成功去补录数量。 */
+  const resolveToastAction = (state: ToastState): (() => void) | undefined => {
+    if (state.bulk) {
+      const target = state.bulk;
+      return () => openBulkSheet(target);
+    }
+    if (state.sticky && state.barcode) {
+      const code = state.barcode;
+      return () => openComposer(code);
+    }
+    return undefined;
+  };
+
+  const submitBulk = async () => {
+    if (!bulk || applying) return;
+    const target = bulk;
+    // 扫码时已经 +1，这里只把差额补上。
+    const delta = bulkQuantity - 1;
+    if (delta === 0) {
+      setBulk(null);
+      showToast({ message: `「${target.name}」保持入库 1 件`, tone: 'info' });
+      return;
+    }
+    setApplying(true);
+    const result = await adjustStock(target.productId, delta);
+    setApplying(false);
+    setBulk(null);
+    if (!result.ok) {
+      showToast({ message: result.message, tone: 'warning' });
+      return;
+    }
+    showToast({
+      message: `已补录 ${delta} 件 · ${result.product.name} 库存 ${result.product.stock}`,
+      tone: 'success',
+    });
   };
 
   const submitComposer = async () => {
@@ -151,7 +235,7 @@ export default function ScanScreen() {
     setFormError(null);
     try {
       if (composer.selection?.type === 'existing') {
-        const result = await bindBarcode(composer.selection.productId, barcode);
+        const result = await bindBarcode(composer.selection.productId, barcode, composer.quantity);
         if (result.kind === 'duplicate') {
           setFormError('该条码已属于其他商品');
           return;
@@ -169,7 +253,7 @@ export default function ScanScreen() {
         setFormError('请选择已有产品，或点击「+ 新增产品」');
         return;
       }
-      const result = await createProduct(composer.name, barcode);
+      const result = await createProduct(composer.name, barcode, composer.quantity);
       if (result.kind === 'duplicate') {
         setFormError('该条码已存在，请改选对应产品');
         return;
@@ -185,7 +269,8 @@ export default function ScanScreen() {
     }
   };
 
-  const scannerEnabled = Boolean(permission?.granted) && (!composer || rescanning) && !queryHit;
+  const scannerEnabled =
+    Boolean(permission?.granted) && (!composer || rescanning) && !queryHit && !bulk;
 
   if (!permission) {
     return <View style={styles.empty} />;
@@ -215,7 +300,7 @@ export default function ScanScreen() {
         facing="back"
         enableTorch={torch}
         barcodeScannerSettings={{
-          barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39', 'code93', 'codabar', 'itf14', 'qr'],
+          barcodeTypes: [...BARCODE_TYPES],
         }}
         onBarcodeScanned={scannerEnabled ? onBarcodeScanned : undefined}
       />
@@ -243,17 +328,13 @@ export default function ScanScreen() {
           </Pressable>
         ) : null}
 
-        {toast && !composer && !queryHit ? (
+        {toast && !composer && !queryHit && !bulk ? (
           <ToastBar
             message={toast.message}
             tone={toast.tone}
             actionHint={toast.actionHint}
             bottom={insets.bottom + 24}
-            onPress={
-              toast.sticky && toast.barcode
-                ? () => openComposer(toast.barcode as string)
-                : undefined
-            }
+            onPress={resolveToastAction(toast)}
           />
         ) : null}
       </View>
@@ -275,12 +356,31 @@ export default function ScanScreen() {
                 </Text>
               );
             })}
-            <Pressable style={styles.queryClose} onPress={() => setQueryHit(null)}>
+            <Pressable
+              style={styles.queryClose}
+              onPress={() => {
+                // 查询是「看一眼下一个」的高频动作，这里提前解锁，不必等满 3 秒。
+                releaseScanLock();
+                setQueryHit(null);
+              }}
+            >
               <Text style={styles.queryCloseText}>关闭并继续扫描</Text>
             </Pressable>
           </View>
         </View>
       ) : null}
+
+      <QuantitySheet
+        visible={bulk !== null}
+        title="修改本次入库数量"
+        productName={bulk?.name ?? ''}
+        hint="扫描时已自动入库 1 件，这里填写本次实际入库的总数量，确认后补录差额。"
+        quantity={bulkQuantity}
+        onChangeQuantity={setBulkQuantity}
+        busy={applying}
+        onConfirm={() => void submitBulk()}
+        onClose={() => setBulk(null)}
+      />
 
       <AddProductModal
         visible={composer !== null && !rescanning}
@@ -289,14 +389,16 @@ export default function ScanScreen() {
         name={composer?.name ?? ''}
         selection={composer?.selection ?? null}
         products={products}
+        quantity={composer?.quantity ?? 1}
         error={formError}
         submitting={submitting}
         onChangeBarcode={(barcode) => setComposer((current) => (current ? { ...current, barcode } : current))}
         onChangeQuery={(query) => setComposer((current) => (current ? { ...current, query } : current))}
         onChangeName={(name) => setComposer((current) => (current ? { ...current, name } : current))}
         onChangeSelection={(selection) => setComposer((current) => (current ? { ...current, selection } : current))}
+        onChangeQuantity={(quantity) => setComposer((current) => (current ? { ...current, quantity } : current))}
         onRescan={() => {
-          lockRef.current = { code: '', at: 0 };
+          releaseScanLock();
           setRescanning(true);
         }}
         onClose={() => {

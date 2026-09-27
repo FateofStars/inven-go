@@ -7,7 +7,13 @@ import type { InventoryDatabase } from '@/lib/types';
 /** 快照保存在 App 私有文档目录下，不会被系统清理缓存时删掉。 */
 const SNAPSHOT_FOLDER = 'backups';
 const SNAPSHOT_LIMIT = 5;
-const SNAPSHOT_PATTERN = /^backup_(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})\.json$/;
+/**
+ * 匹配新旧两种快照文件名：
+ * - 新版 `backup_2026-09-21_23-30-45.json`（精确到秒）
+ * - 旧版 `backup_2026-09-21_2330.json`（仅到分钟，秒视为 0）
+ */
+const SNAPSHOT_PATTERN =
+  /^backup_(\d{4})-(\d{2})-(\d{2})_(\d{2})-?(\d{2})(?:-(\d{2}))?\.json$/;
 
 let snapshotDirectory: Directory | null = null;
 
@@ -25,24 +31,33 @@ export type Snapshot = {
   createdAt: number;
   productCount: number;
   logCount: number;
+  /** 关闭「包含日志」导出的快照为 false，用于在列表里展示「不含日志」。 */
+  includeLogs: boolean;
 };
 
 function pad(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-/** 形如 backup_2026-09-21_2330.json */
+/** 形如 backup_2026-09-21_23-30-45.json，精确到秒，避免同一分钟内多次导出互相覆盖。 */
 function snapshotFileName(date: Date): string {
   const ymd = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  return `backup_${ymd}_${pad(date.getHours())}${pad(date.getMinutes())}.json`;
+  return `backup_${ymd}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}.json`;
 }
 
-/** 从文件名反解出创建时间，避免依赖文件元数据接口。 */
+/** 从文件名反解出创建时间（精确到秒），并兼容旧版仅到分钟的文件名。 */
 function parseSnapshotTime(name: string): number | null {
   const matched = SNAPSHOT_PATTERN.exec(name);
   if (!matched) return null;
-  const [, year, month, day, hour, minute] = matched;
-  return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)).getTime();
+  const [, year, month, day, hour, minute, second] = matched;
+  return new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    second ? Number(second) : 0,
+  ).getTime();
 }
 
 function listSnapshotEntries(): { file: File; name: string; createdAt: number }[] {
@@ -87,6 +102,7 @@ export function saveSnapshot(database: InventoryDatabase): Snapshot {
     createdAt: parseSnapshotTime(name) ?? Date.now(),
     productCount: database.products.length,
     logCount: database.logs.length,
+    includeLogs: database.includeLogs !== false,
   };
 }
 
@@ -103,6 +119,7 @@ export async function listSnapshots(): Promise<Snapshot[]> {
         createdAt: entry.createdAt,
         productCount: parsed.products.length,
         logCount: parsed.logs.length,
+        includeLogs: parsed.includeLogs !== false,
       });
     } catch {
       // 快照损坏时跳过，不影响其他记录

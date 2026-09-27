@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 
+import { QuantityStepper } from '@/components/QuantityStepper';
 import type { Product } from '@/lib/types';
 import { colors } from '@/theme';
 
@@ -23,12 +24,14 @@ type AddProductModalProps = {
   name: string;
   selection: ProductSelection;
   products: Product[];
+  quantity: number;
   error?: string | null;
   submitting?: boolean;
   onChangeBarcode: (value: string) => void;
   onChangeQuery: (value: string) => void;
   onChangeName: (value: string) => void;
   onChangeSelection: (selection: ProductSelection) => void;
+  onChangeQuantity: (value: number) => void;
   onRescan: () => void;
   onClose: () => void;
   onSubmit: () => void;
@@ -41,12 +44,14 @@ export function AddProductModal({
   name,
   selection,
   products,
+  quantity,
   error,
   submitting = false,
   onChangeBarcode,
   onChangeQuery,
   onChangeName,
   onChangeSelection,
+  onChangeQuantity,
   onRescan,
   onClose,
   onSubmit,
@@ -68,7 +73,7 @@ export function AddProductModal({
         <View style={styles.sheet}>
           <View style={styles.handle} />
           <Text style={styles.title}>添加商品</Text>
-          <Text style={styles.subtitle}>一个产品可以绑定多个不同条码。新商品会以当前条码入库 1 件。</Text>
+          <Text style={styles.subtitle}>一个产品可以绑定多个不同条码。确认添加时按下方数量入库。</Text>
           <ScrollView
             style={styles.formScroll}
             keyboardShouldPersistTaps="handled"
@@ -89,6 +94,9 @@ export function AddProductModal({
                 <Text style={styles.rescanText}>重新扫描</Text>
               </Pressable>
             </View>
+
+            <Text style={styles.label}>本次入库数量</Text>
+            <QuantityStepper value={quantity} onChange={onChangeQuantity} />
 
             <Text style={styles.label}>产品名称</Text>
             <TextInput
@@ -162,7 +170,7 @@ export function AddProductModal({
 
             {selectedProduct ? (
               <View style={styles.bindBox}>
-                <Text style={styles.bindText}>将把条码绑定到「{selectedProduct.name}」，并入库 1 件。</Text>
+                <Text style={styles.bindText}>将把条码绑定到「{selectedProduct.name}」，并入库 {quantity} 件。</Text>
               </View>
             ) : null}
 

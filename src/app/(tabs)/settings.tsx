@@ -5,11 +5,11 @@ import * as Clipboard from 'expo-clipboard';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CenterCard } from '@/components/CenterCard';
-import { ToastBar } from '@/components/ToastBar';
+import { ToastBar, type ToastTone } from '@/components/ToastBar';
 import { getAppVersion } from '@/constants/appInfo';
 import { useInventory } from '@/context/InventoryContext';
 import { listSnapshots, readPickedText, readSnapshotText, saveSnapshot, type Snapshot } from '@/lib/backup';
@@ -21,6 +21,10 @@ import { colors, shadow } from '@/theme';
 /** 清空数据库必须精准输入的确认词（区分大小写）。 */
 const CLEAR_CONFIRM_WORD = 'Yes';
 
+/** 「包含历史日志」卡片的琥珀色标识，用于和主题里的 warning 色区分出更亲和的日志语义。 */
+const LOG_ACCENT = '#D97706';
+const LOG_ACCENT_SOFT = '#FEF3C7';
+
 type BusyState = 'export' | 'clipboard' | 'import' | 'clear' | null;
 
 /** 已经读取并通过校验、等待用户确认的待导入数据。 */
@@ -31,6 +35,14 @@ type PendingImport = {
   logCount: number;
 };
 
+/** 页面唯一的反馈通道：所有成功与失败提示都走底部悬浮条，不再有内嵌文字框。 */
+type ToastState = {
+  message: string;
+  tone: ToastTone;
+  /** 副标题，用于承载导入统计等补充信息。 */
+  actionHint?: string;
+};
+
 export default function SettingsScreen() {
   const { products, logs, exportDatabase, importDatabase, clearDatabase } = useInventory();
   const insets = useSafeAreaInsets();
@@ -39,6 +51,8 @@ export default function SettingsScreen() {
   const [importOpen, setImportOpen] = useState(false);
   const [textOpen, setTextOpen] = useState(false);
   const [askClear, setAskClear] = useState(false);
+  /** 导出时是否携带历史日志，关闭后只导出商品库存。每次打开弹窗都会重置为开启。 */
+  const [includeLogs, setIncludeLogs] = useState(true);
 
   const [textValue, setTextValue] = useState('');
   const [textError, setTextError] = useState<string | null>(null);
@@ -50,12 +64,12 @@ export default function SettingsScreen() {
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
 
   const [busy, setBusy] = useState<BusyState>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 2200);
+    // 成功提示短暂停留即可；失败/提示类信息不再有内嵌框兜底，停留更久以确保能看清。
+    const timer = setTimeout(() => setToast(null), toast.tone === 'success' ? 2400 : 4200);
     return () => clearTimeout(timer);
   }, [toast]);
 
@@ -86,27 +100,27 @@ export default function SettingsScreen() {
    * 再静默保存一份本机快照，最后把文本交给分享或剪贴板通道。
    */
   const buildExportText = useCallback(async () => {
-    const snapshot = await exportDatabase();
+    const snapshot = await exportDatabase(includeLogs);
     const text = JSON.stringify(snapshot, null, 2);
     try {
       saveSnapshot(snapshot);
       setSnapshots(await listSnapshots());
     } catch {
-      setNotice('数据库已生成，但本机快照保存失败。');
+      setToast({ message: '数据库已生成，但本机快照保存失败。', tone: 'warning' });
     }
     return text;
-  }, [exportDatabase]);
+  }, [exportDatabase, includeLogs]);
 
   const handleShareExport = async () => {
     if (busy) return;
     setBusy('export');
-    setNotice(null);
+    setToast(null);
     try {
       const text = await buildExportText();
       const file = new File(Paths.cache, `inventory-${Date.now()}.json`);
       file.write(text);
       if (!(await Sharing.isAvailableAsync())) {
-        setNotice('本机不支持系统分享，可改用「复制 JSON 到剪贴板」。');
+        setToast({ message: '本机不支持系统分享，可改用「复制 JSON 到剪贴板」。', tone: 'info' });
         return;
       }
       await Sharing.shareAsync(file.uri, {
@@ -115,9 +129,9 @@ export default function SettingsScreen() {
         UTI: 'public.json',
       });
       setExportOpen(false);
-      setToast('已导出并保存本机快照');
+      setToast({ message: '已导出并保存本机快照', tone: 'success' });
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '导出失败');
+      setToast({ message: error instanceof Error ? error.message : '导出失败', tone: 'warning' });
     } finally {
       setBusy(null);
     }
@@ -126,20 +140,20 @@ export default function SettingsScreen() {
   const handleCopyExport = async () => {
     if (busy) return;
     setBusy('clipboard');
-    setNotice(null);
+    setToast(null);
     try {
       await Clipboard.setStringAsync(await buildExportText());
       setExportOpen(false);
-      setToast('已复制备份数据到剪贴板');
+      setToast({ message: '已复制备份数据到剪贴板', tone: 'success' });
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '复制失败');
+      setToast({ message: error instanceof Error ? error.message : '复制失败', tone: 'warning' });
     } finally {
       setBusy(null);
     }
   };
 
   const openImport = () => {
-    setNotice(null);
+    setToast(null);
     setImportOpen(true);
     void refreshSnapshots();
   };
@@ -184,7 +198,7 @@ export default function SettingsScreen() {
     if (busy) return;
     setImportOpen(false);
     setBusy('import');
-    setNotice(null);
+    setToast(null);
     try {
       const picked = await DocumentPicker.getDocumentAsync({
         // 放开类型限制，避免部分 ROM 因 MIME 过滤给出不可读的虚拟 URI。
@@ -194,19 +208,19 @@ export default function SettingsScreen() {
         multiple: false,
       });
       if (picked.canceled || !picked.assets[0]) {
-        setNotice('已取消选择文件。');
+        setToast({ message: '已取消选择文件。', tone: 'info' });
         return;
       }
       let text: string;
       try {
         text = await readPickedText(picked.assets[0].uri);
       } catch {
-        setNotice('无法读取所选文件。可改用「从剪贴板文本导入」或本机快照。');
+        setToast({ message: '无法读取所选文件。可改用「从剪贴板文本导入」或本机快照。', tone: 'warning' });
         return;
       }
       const parsed = parseDatabase(text);
       if (!parsed) {
-        setNotice('所选文件不是可识别的库存数据库。');
+        setToast({ message: '所选文件不是可识别的库存数据库。', tone: 'warning' });
         return;
       }
       setPending({
@@ -216,7 +230,7 @@ export default function SettingsScreen() {
         logCount: parsed.logs.length,
       });
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '导入失败');
+      setToast({ message: error instanceof Error ? error.message : '导入失败', tone: 'warning' });
     } finally {
       setBusy(null);
     }
@@ -226,12 +240,12 @@ export default function SettingsScreen() {
   const handlePickSnapshot = async (snapshot: Snapshot) => {
     if (busy) return;
     setBusy('import');
-    setNotice(null);
+    setToast(null);
     try {
       const text = await readSnapshotText(snapshot.uri);
       const parsed = parseDatabase(text);
       if (!parsed) {
-        setNotice('该快照已损坏，无法读取。');
+        setToast({ message: '该快照已损坏，无法读取。', tone: 'warning' });
         return;
       }
       setImportOpen(false);
@@ -242,7 +256,7 @@ export default function SettingsScreen() {
         logCount: parsed.logs.length,
       });
     } catch {
-      setNotice('读取快照失败。');
+      setToast({ message: '读取快照失败。', tone: 'warning' });
     } finally {
       setBusy(null);
     }
@@ -253,18 +267,24 @@ export default function SettingsScreen() {
     if (!current || busy) return;
     setPending(null);
     setBusy('import');
-    setNotice(null);
+    setToast(null);
     try {
       const result = await importDatabase(current.raw, importMode);
       if (result.ok) {
-        setNotice(result.detail);
-        setToast('数据库导入成功');
+        // 成功只保留一条悬浮提示，统计信息作为副标题合并展示，避免与内嵌文字框重叠。
+        setToast({
+          message: '数据库导入成功',
+          tone: 'success',
+          actionHint: result.includeLogs
+            ? `商品 ${result.productCount} 个 · 历史日志 ${result.logCount} 条`
+            : `商品 ${result.productCount} 个 · 不含日志`,
+        });
         void refreshSnapshots();
         return;
       }
-      setNotice(result.message);
+      setToast({ message: result.message, tone: 'warning' });
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '导入失败');
+      setToast({ message: error instanceof Error ? error.message : '导入失败', tone: 'warning' });
     } finally {
       setBusy(null);
     }
@@ -279,12 +299,12 @@ export default function SettingsScreen() {
     if (clearInput !== CLEAR_CONFIRM_WORD || busy) return;
     closeClear();
     setBusy('clear');
-    setNotice(null);
+    setToast(null);
     try {
       await clearDatabase();
-      setToast('数据库已成功清空');
+      setToast({ message: '数据库已成功清空', tone: 'success' });
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : '清空失败');
+      setToast({ message: error instanceof Error ? error.message : '清空失败', tone: 'warning' });
     } finally {
       setBusy(null);
     }
@@ -300,7 +320,9 @@ export default function SettingsScreen() {
       soft: colors.tealSoft,
       busy: busy === 'export' || busy === 'clipboard',
       onPress: () => {
-        setNotice(null);
+        setToast(null);
+        // 每次打开导出弹窗都回到默认的「包含日志」，避免上次的选择被默默沿用。
+        setIncludeLogs(true);
         setExportOpen(true);
         // 打开弹窗前再刷新一次，确保展示给用户的份数是实时的。
         void refreshSnapshots();
@@ -375,8 +397,6 @@ export default function SettingsScreen() {
             />
           ))}
         </View>
-
-        {notice ? <Text style={styles.notice}>{notice}</Text> : null}
       </View>
 
       <CenterCard
@@ -388,7 +408,37 @@ export default function SettingsScreen() {
         onCancel={() => setExportOpen(false)}
         onConfirm={() => setExportOpen(false)}
       >
-        <View style={styles.rows}>
+        <View style={[styles.rows, styles.rowsGroup]}>
+          <Pressable
+            style={({ pressed }) => [styles.pill, styles.pillCompact, pressed && styles.pillPressed]}
+            onPress={() => setIncludeLogs((value) => !value)}
+            disabled={busy !== null}
+            accessibilityRole="switch"
+            accessibilityLabel="包含历史日志"
+            accessibilityState={{ checked: includeLogs, disabled: busy !== null }}
+          >
+            <View style={[styles.pillIcon, styles.pillIconCompact, { backgroundColor: LOG_ACCENT_SOFT }]}>
+              <MaterialCommunityIcons name="file-document-outline" size={19} color={LOG_ACCENT} />
+            </View>
+            <View style={styles.pillBody}>
+              <Text style={[styles.pillTitle, styles.pillTitleCompact, { color: LOG_ACCENT }]}>包含历史日志</Text>
+              <Text style={styles.pillText}>开启备份全部流水；关闭仅备份当前库存</Text>
+            </View>
+            {/*
+              开关本身设置 pointerEvents="none" 并再包一层同样设置为 none 的 View，
+              确保原生 Switch 不会拦截/吞掉触摸，也不会与整行的 onPress 各触发一次相互抵消。
+              这样无论点文字、空白处还是右侧滑块，都由整行统一切换状态。
+            */}
+            <View pointerEvents="none">
+              <Switch
+                value={includeLogs}
+                pointerEvents="none"
+                trackColor={{ false: colors.line, true: colors.green }}
+                thumbColor={colors.white}
+                ios_backgroundColor={colors.line}
+              />
+            </View>
+          </Pressable>
           <PillRow
             compact
             icon="share-variant-outline"
@@ -465,7 +515,11 @@ export default function SettingsScreen() {
                 color={colors.clay}
                 soft={colors.claySoft}
                 title={formatTimestamp(snapshot.createdAt)}
-                text={`${snapshot.productCount} 个商品 · ${snapshot.logCount} 条日志`}
+                text={
+                  snapshot.includeLogs
+                    ? `${snapshot.productCount} 个商品 · ${snapshot.logCount} 条日志`
+                    : `${snapshot.productCount} 个商品 · 不含日志`
+                }
                 disabled={busy !== null}
                 onPress={() => void handlePickSnapshot(snapshot)}
               />
@@ -567,7 +621,14 @@ export default function SettingsScreen() {
         <Text style={styles.confirmHint}>区分大小写，需精准输入 {CLEAR_CONFIRM_WORD} 才能点击确认清空。</Text>
       </CenterCard>
 
-      {toast ? <ToastBar message={toast} tone="success" bottom={24} /> : null}
+      {toast ? (
+        <ToastBar
+          message={toast.message}
+          tone={toast.tone}
+          actionHint={toast.actionHint}
+          bottom={24}
+        />
+      ) : null}
     </View>
   );
 }
@@ -677,6 +738,10 @@ const styles = StyleSheet.create({
   rows: {
     gap: 8,
   },
+  /** 与弹窗底部「说明 → 按钮」的间距（actions.marginTop）对齐，让卡片组上下留白对称。 */
+  rowsGroup: {
+    marginTop: 22,
+  },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -746,15 +811,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
     lineHeight: 18,
-  },
-  notice: {
-    color: colors.ink,
-    backgroundColor: colors.card,
-    borderRadius: 14,
-    padding: 12,
-    lineHeight: 20,
-    borderWidth: 1,
-    borderColor: colors.line,
   },
   clipboardButton: {
     marginTop: 16,

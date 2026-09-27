@@ -24,7 +24,32 @@ export type BindResult =
   | { kind: 'missing-product' };
 export type AdjustResult = { ok: true; product: Product } | { ok: false; message: string };
 export type DeleteResult = { ok: true } | { ok: false; message: string };
-export type ImportResult = { ok: true; detail: string } | { ok: false; message: string };
+export type ImportResult =
+  | {
+      ok: true;
+      detail: string;
+      /** 导入后数据库的商品数，用于在提示里展示统计。 */
+      productCount: number;
+      /** 导入后数据库的日志数。 */
+      logCount: number;
+      /** 导入包是否携带完整日志；不含日志的包在提示里展示为「不含日志」。 */
+      includeLogs: boolean;
+    }
+  | { ok: false; message: string };
+
+/**
+ * 条码绑定关系的变更结果。
+ * - `duplicate`：该条码已被**其他**商品占用
+ * - `exists`：该条码已经是**本商品**的条码
+ * - `last-barcode`：商品仅剩一个条码，不允许删除
+ */
+export type BarcodeOpResult =
+  | { kind: 'ok'; product: Product }
+  | { kind: 'duplicate'; owner: string }
+  | { kind: 'exists' }
+  | { kind: 'last-barcode' }
+  | { kind: 'not-found' }
+  | { kind: 'invalid' };
 
 type InventoryContextValue = {
   ready: boolean;
@@ -33,11 +58,15 @@ type InventoryContextValue = {
   findByBarcode: (barcode: string) => Product | undefined;
   inboundScan: (barcode: string) => Promise<InboundResult>;
   outboundScan: (barcode: string) => Promise<OutboundResult>;
-  createProduct: (name: string, barcode: string) => Promise<CreateResult>;
-  bindBarcode: (productId: string, barcode: string) => Promise<BindResult>;
+  createProduct: (name: string, barcode: string, quantity?: number) => Promise<CreateResult>;
+  bindBarcode: (productId: string, barcode: string, quantity?: number) => Promise<BindResult>;
+  /** 只调整绑定关系，不改动库存。 */
+  addBarcode: (productId: string, barcode: string) => Promise<BarcodeOpResult>;
+  replaceBarcode: (productId: string, previous: string, next: string) => Promise<BarcodeOpResult>;
+  removeBarcode: (productId: string, barcode: string) => Promise<BarcodeOpResult>;
   adjustStock: (productId: string, delta: number) => Promise<AdjustResult>;
   deleteProduct: (productId: string) => Promise<DeleteResult>;
-  exportDatabase: () => Promise<InventoryDatabase>;
+  exportDatabase: (includeLogs?: boolean) => Promise<InventoryDatabase>;
   importDatabase: (raw: string, mode: ImportMode) => Promise<ImportResult>;
   clearDatabase: () => Promise<void>;
 };
@@ -48,6 +77,13 @@ function replaceProduct(products: Product[], index: number, product: Product): P
   const next = products.slice();
   next[index] = product;
   return next;
+}
+
+/** 入库数量的兜底：非有限数、非整数或小于 1 时一律按 1 件处理。 */
+function normalizeQuantity(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return 1;
+  const floored = Math.floor(value);
+  return floored >= 1 ? floored : 1;
 }
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
@@ -161,7 +197,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   );
 
   const createProduct = useCallback(
-    (name: string, barcode: string) =>
+    (name: string, barcode: string, quantity?: number) =>
       commit<CreateResult>((current) => {
         const normalizedName = name.trim();
         const normalized = barcode.trim();
@@ -169,11 +205,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         if (findProductByBarcode(current.products, normalized)) {
           return { next: current, result: { kind: 'duplicate' as const } };
         }
+        const amount = normalizeQuantity(quantity);
         const now = Date.now();
         const product: Product = {
           id: createId(),
           name: normalizedName,
-          stock: 1,
+          stock: amount,
           barcodes: [normalized],
           createdAt: now,
           updatedAt: now,
@@ -184,7 +221,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: [product, ...current.products],
             logs: [
               ...current.logs,
-              makeLog('create', `新增商品「${product.name}」，条码 ${normalized}，初始库存 1`),
+              makeLog('create', `新增商品「${product.name}」，条码 ${normalized}，初始库存 ${amount}`),
             ],
           },
           result: { kind: 'created' as const, product },
@@ -194,7 +231,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   );
 
   const bindBarcode = useCallback(
-    (productId: string, barcode: string) =>
+    (productId: string, barcode: string, quantity?: number) =>
       commit<BindResult>((current) => {
         const normalized = barcode.trim();
         const index = current.products.findIndex((product) => product.id === productId);
@@ -203,15 +240,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         if (owner && owner.id !== productId) return { next: current, result: { kind: 'duplicate' as const } };
         const product = current.products[index];
         const alreadyBound = product.barcodes.includes(normalized);
+        const amount = normalizeQuantity(quantity);
         const updated: Product = {
           ...product,
           barcodes: alreadyBound ? product.barcodes : [...product.barcodes, normalized],
-          stock: product.stock + 1,
+          stock: product.stock + amount,
           updatedAt: Date.now(),
         };
         const detail = alreadyBound
           ? `入库「${updated.name}」，条码 ${normalized}，库存 ${product.stock} → ${updated.stock}`
-          : `商品「${updated.name}」绑定条码 ${normalized} 并入库 1 件，库存 ${product.stock} → ${updated.stock}`;
+          : `商品「${updated.name}」绑定条码 ${normalized} 并入库 ${amount} 件，库存 ${product.stock} → ${updated.stock}`;
         return {
           next: {
             ...current,
@@ -219,6 +257,96 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             logs: [...current.logs, makeLog('inbound', detail)],
           },
           result: { kind: alreadyBound ? ('updated' as const) : ('bound' as const), product: updated },
+        };
+      }),
+    [commit],
+  );
+
+  /** 只追加绑定关系，不改动库存（用于商品详情页手工维护条码）。 */
+  const addBarcode = useCallback(
+    (productId: string, barcode: string) =>
+      commit<BarcodeOpResult>((current) => {
+        const normalized = barcode.trim();
+        if (!normalized) return { next: current, result: { kind: 'invalid' as const } };
+        const index = current.products.findIndex((product) => product.id === productId);
+        if (index < 0) return { next: current, result: { kind: 'not-found' as const } };
+        const owner = findProductByBarcode(current.products, normalized);
+        if (owner && owner.id !== productId) {
+          return { next: current, result: { kind: 'duplicate' as const, owner: owner.name } };
+        }
+        const product = current.products[index];
+        if (product.barcodes.includes(normalized)) return { next: current, result: { kind: 'exists' as const } };
+        const updated: Product = {
+          ...product,
+          barcodes: [...product.barcodes, normalized],
+          updatedAt: Date.now(),
+        };
+        return {
+          next: {
+            ...current,
+            products: replaceProduct(current.products, index, updated),
+            logs: [...current.logs, makeLog('barcode', `更新商品绑定条码：「${updated.name}」新增条码 ${normalized}`)],
+          },
+          result: { kind: 'ok' as const, product: updated },
+        };
+      }),
+    [commit],
+  );
+
+  const replaceBarcode = useCallback(
+    (productId: string, previous: string, replacement: string) =>
+      commit<BarcodeOpResult>((current) => {
+        const from = previous.trim();
+        const to = replacement.trim();
+        if (!to) return { next: current, result: { kind: 'invalid' as const } };
+        const index = current.products.findIndex((product) => product.id === productId);
+        if (index < 0) return { next: current, result: { kind: 'not-found' as const } };
+        const product = current.products[index];
+        if (!product.barcodes.includes(from)) return { next: current, result: { kind: 'not-found' as const } };
+        if (from === to) return { next: current, result: { kind: 'exists' as const } };
+        const owner = findProductByBarcode(current.products, to);
+        if (owner && owner.id !== productId) {
+          return { next: current, result: { kind: 'duplicate' as const, owner: owner.name } };
+        }
+        const updated: Product = {
+          ...product,
+          barcodes: product.barcodes.map((code) => (code === from ? to : code)),
+          updatedAt: Date.now(),
+        };
+        return {
+          next: {
+            ...current,
+            products: replaceProduct(current.products, index, updated),
+            logs: [...current.logs, makeLog('barcode', `更新商品绑定条码：「${updated.name}」将 ${from} 修改为 ${to}`)],
+          },
+          result: { kind: 'ok' as const, product: updated },
+        };
+      }),
+    [commit],
+  );
+
+  const removeBarcode = useCallback(
+    (productId: string, barcode: string) =>
+      commit<BarcodeOpResult>((current) => {
+        const normalized = barcode.trim();
+        const index = current.products.findIndex((product) => product.id === productId);
+        if (index < 0) return { next: current, result: { kind: 'not-found' as const } };
+        const product = current.products[index];
+        if (!product.barcodes.includes(normalized)) return { next: current, result: { kind: 'not-found' as const } };
+        // 防呆：商品至少保留一个条码，否则它将无法再被任何扫描命中。
+        if (product.barcodes.length <= 1) return { next: current, result: { kind: 'last-barcode' as const } };
+        const updated: Product = {
+          ...product,
+          barcodes: product.barcodes.filter((code) => code !== normalized),
+          updatedAt: Date.now(),
+        };
+        return {
+          next: {
+            ...current,
+            products: replaceProduct(current.products, index, updated),
+            logs: [...current.logs, makeLog('barcode', `更新商品绑定条码：「${updated.name}」删除条码 ${normalized}`)],
+          },
+          result: { kind: 'ok' as const, product: updated },
         };
       }),
     [commit],
@@ -274,19 +402,28 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
-  const exportDatabase = useCallback(async () => {
-    // 必须先把本次「导出」日志写进状态并落盘（commit 内部 await AsyncStorage.setItem），
-    // 之后才返回快照给调用方打包成 JSON。这样导出的文件里必然包含它自己这条导出记录，
-    // 备份数据自闭环、可完整还原。
-    await commit<LogEntry>((current) => {
-      const entry = makeLog(
-        'export',
-        `导出数据库，商品 ${current.products.length} 个，日志 ${current.logs.length + 1} 条`,
-      );
-      return { next: { ...current, logs: [...current.logs, entry] }, result: entry };
-    });
-    return snapshotRef.current;
-  }, [commit]);
+  const exportDatabase = useCallback(
+    async (includeLogs = true): Promise<InventoryDatabase> => {
+      // 必须先把本次「导出」日志写进状态并落盘（commit 内部 await AsyncStorage.setItem），
+      // 之后才返回快照给调用方打包成 JSON。这样导出的文件里必然包含它自己这条导出记录，
+      // 备份数据自闭环、可完整还原。
+      // 关闭「包含日志」只影响导出的数据包，本机历史日志仍会照常保留、不被清空。
+      const entry = await commit<LogEntry>((current) => {
+        const detail = includeLogs
+          ? `导出数据库，商品 ${current.products.length} 个，日志 ${current.logs.length + 1} 条`
+          : `导出数据库（不含日志），商品 ${current.products.length} 个`;
+        const created = makeLog('export', detail);
+        return { next: { ...current, logs: [...current.logs, created] }, result: created };
+      });
+      const snapshot = snapshotRef.current;
+      if (includeLogs) {
+        return { version: 1, products: snapshot.products, logs: snapshot.logs };
+      }
+      // 不含日志时只保留本次导出这一条记录，保证因果闭环又不夹带历史流水。
+      return { version: 1, products: snapshot.products, logs: [entry], includeLogs: false };
+    },
+    [commit],
+  );
 
   const importDatabase = useCallback(
     (raw: string, mode: ImportMode) => {
@@ -299,7 +436,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             ? `覆盖导入数据库，商品 ${base.products.length} 个，历史日志 ${base.logs.length} 条`
             : `合并导入数据库，商品 ${base.products.length} 个，日志 ${base.logs.length} 条`;
         const next = { ...base, logs: [...base.logs, makeLog('import', detail)] };
-        return { next, result: { ok: true as const, detail } };
+        return {
+          next,
+          result: {
+            ok: true as const,
+            detail,
+            productCount: base.products.length,
+            logCount: base.logs.length,
+            includeLogs: parsed.includeLogs !== false,
+          },
+        };
       });
     },
     [commit],
@@ -322,6 +468,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     outboundScan,
     createProduct,
     bindBarcode,
+    addBarcode,
+    replaceBarcode,
+    removeBarcode,
     adjustStock,
     deleteProduct,
     exportDatabase,
