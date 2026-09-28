@@ -46,8 +46,6 @@ export default function ProductScreen() {
     useInventory();
   const product = products.find((item) => item.id === productId);
   const [amount, setAmount] = useState('1');
-  // notice 只承载「快速调整」卡片自己的反馈，条码相关的提示统一走底部 Toast。
-  const [notice, setNotice] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, setPending] = useState(false);
@@ -90,14 +88,19 @@ export default function ProductScreen() {
     if (pending) return;
     setPending(true);
     const result = await adjustStock(product.id, delta);
-    setNotice(result.ok ? `库存已更新为 ${result.product.stock}` : result.message);
     setPending(false);
+    if (!result.ok) {
+      showToast(result.message, 'warning');
+      return;
+    }
+    // 增加走标准深绿成功色；减少改用与「取消置顶」一致的蓝色调（白字），方向一眼可辨。
+    showToast(`库存已更新为 ${result.product.stock}`, delta < 0 ? 'info' : 'success');
   };
 
   const applyTyped = (direction: 1 | -1) => {
     const value = parsePositiveInteger(amount);
     if (value === null) {
-      setNotice('请输入大于 0 的整数');
+      showToast('请输入大于 0 的整数', 'warning');
       return;
     }
     void apply(direction * value);
@@ -146,8 +149,8 @@ export default function ProductScreen() {
               <Text style={[styles.pinLabel, { color: pinColor }]}>{pinned ? '已置顶' : '置顶'}</Text>
             </Pressable>
           </View>
-          <Text style={[styles.stock, product.stock === 0 && styles.stockEmpty]}>{product.stock}</Text>
           <Text style={styles.stockLabel}>当前库存</Text>
+          <Text style={[styles.stock, product.stock === 0 && styles.stockEmpty]}>{product.stock}</Text>
           <Text style={styles.meta}>更新于 {formatTimestamp(product.updatedAt)}</Text>
         </View>
 
@@ -194,7 +197,6 @@ export default function ProductScreen() {
               <Text style={styles.plusText}>增加</Text>
             </Pressable>
           </View>
-          {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         </View>
 
         <View style={styles.panel}>
@@ -321,7 +323,7 @@ export default function ProductScreen() {
         />
       </ScrollView>
 
-      {/* 底部浮动提示：条码相关的新增/修改/删除/防呆反馈全部走这里。 */}
+      {/* 底部浮动提示：库存增减与条码相关的新增/修改/删除/防呆反馈全部走这里。 */}
       {toast ? <ToastBar message={toast.message} tone={toast.tone} bottom={insets.bottom + 24} /> : null}
     </View>
   );
@@ -390,15 +392,21 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   stock: {
-    marginTop: 12,
-    color: '#F2C14E',
+    // 标签紧贴数字上方，只留一点点行间距离，让「当前库存 + 数字」读成一个整体。
+    marginTop: 2,
+    // 银灰填充 + 白色泛光描边，在深黑底上形成通透的微轮廓。
+    color: '#D6DBDF',
     fontSize: 56,
     fontWeight: '800',
+    textShadowColor: '#FFFFFF',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 3,
   },
   stockEmpty: {
     color: '#F0A097',
   },
   stockLabel: {
+    marginTop: 12,
     color: '#D9CBB8',
     fontSize: 13,
   },
@@ -477,11 +485,6 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 18,
     fontWeight: '700',
-  },
-  notice: {
-    color: colors.navy,
-    fontSize: 13,
-    fontWeight: '600',
   },
   barcodeRow: {
     height: 46,

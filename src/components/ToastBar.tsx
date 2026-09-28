@@ -4,9 +4,17 @@ import { colors, shadow } from '@/theme';
 
 export type ToastTone = 'success' | 'warning' | 'info';
 
+/**
+ * 副标题（actionHint）使用的暖黄色。
+ * 导出出来给「同一底色、不同字色」的场景复用，避免各处硬编码色值。
+ */
+export const TOAST_HINT_COLOR = '#F3D7B5';
+
 type ToastBarProps = {
   message: string;
   tone: ToastTone;
+  /** 覆盖主文案字色；不传则跟随该 tone 的默认字色。 */
+  messageColor?: string;
   actionHint?: string;
   onPress?: () => void;
   bottom: number;
@@ -18,7 +26,7 @@ const toneStyle = {
   info: { background: '#1C2E52', label: colors.white },
 } as const;
 
-export function ToastBar({ message, tone, actionHint, onPress, bottom }: ToastBarProps) {
+export function ToastBar({ message, tone, messageColor, actionHint, onPress, bottom }: ToastBarProps) {
   const palette = toneStyle[tone];
   return (
     <Pressable
@@ -32,7 +40,7 @@ export function ToastBar({ message, tone, actionHint, onPress, bottom }: ToastBa
       ]}
     >
       <View style={styles.copy}>
-        <Text style={[styles.message, { color: palette.label }]}>{message}</Text>
+        <Text style={[styles.message, { color: messageColor ?? palette.label }]}>{message}</Text>
         {actionHint ? <Text style={styles.hint}>{actionHint}</Text> : null}
       </View>
     </Pressable>
@@ -61,7 +69,7 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   hint: {
-    color: '#F3D7B5',
+    color: TOAST_HINT_COLOR,
     fontSize: 13,
   },
 });
