@@ -20,6 +20,12 @@ export type ChangelogEntry = {
 
 export const CHANGELOG_DATA: ChangelogEntry[] = [
   {
+    version: '1.2.6',
+    items: [
+      '修复置顶卡片拖拽松手后，目标位置会提前出现一张卡片、与悬浮卡重叠的问题',
+    ],
+  },
+  {
     version: '1.2.5',
     items: [
       '新增商品置顶：商品详情页右上角可一键置顶，置顶商品固定排在首页最前方，长按 0.5 秒拖拽即可调整置顶顺序',

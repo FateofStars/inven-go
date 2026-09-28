@@ -90,8 +90,6 @@ export default function InventoryScreen() {
   const [query, setQuery] = useState('');
   const [toast, setToast] = useState<ToastState | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  /** 松手后仍在下落动画中的卡片：只驱动悬浮层，不参与占位槽渲染。 */
-  const [settlingId, setSettlingId] = useState<string | null>(null);
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
   const [actionBarHeight, setActionBarHeight] = useState(ACTION_BAR_HEIGHT);
   // 取整避免两列宽度之和与容器差出亚像素，导致 flexWrap 意外换行。
@@ -142,10 +140,10 @@ export default function InventoryScreen() {
     [matched],
   );
 
-  const overlayProduct = useMemo(() => {
-    const id = draggingId ?? settlingId;
-    return id ? products.find((product) => product.id === id) ?? null : null;
-  }, [products, draggingId, settlingId]);
+  const overlayProduct = useMemo(
+    () => (draggingId ? products.find((product) => product.id === draggingId) ?? null : null),
+    [products, draggingId],
+  );
 
   /**
    * 置顶区域按预览顺序排列（拖拽时用 previewOrder，否则用自然顺序）。
@@ -212,7 +210,6 @@ export default function InventoryScreen() {
       capturedRef.current = false;
       targetRef.current = startIndex;
       setDraggingId(id);
-      setSettlingId(null);
       // 起手顺序与自然顺序一致，先不设预览；只有落点变化时才切到预览顺序。
       setPreviewOrder(null);
       dragPos.setValue({ x: cardLeft - rootOriginRef.current.x, y: cardTop - rootOriginRef.current.y });
@@ -256,9 +253,6 @@ export default function InventoryScreen() {
     if (!state) return;
     dragRef.current = null;
     capturedRef.current = false;
-    // 先无条件复位占位态：松手（或被系统打断）的瞬间虚线槽就必须消失，
-    // 绝不能把「是否恢复正常外观」押在下落动画的回调上。
-    setDraggingId(null);
     const colPitch = cardWidth + CARD_GAP;
     const rowPitch = (cellHeightRef.current || FALLBACK_CARD_HEIGHT) + CARD_GAP;
     const index = Math.min(targetRef.current, Math.max(0, pinnedProducts.length - 1));
@@ -266,8 +260,8 @@ export default function InventoryScreen() {
       x: state.grid.x + (index % 2) * colPitch,
       y: state.grid.y + Math.floor(index / 2) * rowPitch,
     };
-    // 悬浮层继续平滑落进目标槽位，结束后再撤掉。
-    setSettlingId(state.id);
+    // 落位动画期间不解除占位态：底层卡片全程保持隐藏（内容 opacity 0），
+    // 否则松手瞬间槽位里会提前冒出一张实体卡片，与空中的悬浮卡形成「克隆卡」重叠。
     Animated.parallel([
       Animated.timing(dragPos.x, {
         toValue: drop.x - rootOriginRef.current.x,
@@ -280,7 +274,11 @@ export default function InventoryScreen() {
         useNativeDriver: false,
       }),
     ]).start(() => {
-      setSettlingId(null);
+      // 动画走完才做状态交接：同一帧内撤掉占位槽与悬浮层，
+      // 此时悬浮卡已与目标槽位完全重合，底层真实卡片就地显形，视觉无缝衔接。
+      // 这里不按 finished 分支跳过收尾——被中断（如立刻开始下一次拖拽）也必须清干净，
+      // 否则悬浮层会永久残留。
+      setDraggingId(null);
       lift.setValue(0);
       // 等置顶顺序真正写进商品数据后再撤掉预览顺序，
       // 否则撤下的瞬间会先回退到旧顺序、再跳到新顺序，肉眼能看到一次顺序回跳。
