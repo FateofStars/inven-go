@@ -57,7 +57,7 @@ function readProduct(value: unknown): Product | null {
   const stock =
     typeof record.stock === 'number' && Number.isFinite(record.stock) ? Math.max(0, Math.floor(record.stock)) : 0;
   const now = Date.now();
-  return {
+  const product: Product = {
     id: record.id,
     name: record.name.trim() || '未命名商品',
     stock,
@@ -65,6 +65,14 @@ function readProduct(value: unknown): Product | null {
     createdAt: typeof record.createdAt === 'number' ? record.createdAt : now,
     updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : now,
   };
+  // 置顶信息只在确实置顶时才写回，避免给旧备份补齐无意义的字段。
+  if (record.isPinned === true) {
+    product.isPinned = true;
+    if (typeof record.pinOrder === 'number' && Number.isFinite(record.pinOrder)) {
+      product.pinOrder = Math.floor(record.pinOrder);
+    }
+  }
+  return product;
 }
 
 function readLog(value: unknown): LogEntry | null {

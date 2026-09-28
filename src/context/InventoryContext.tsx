@@ -66,6 +66,10 @@ type InventoryContextValue = {
   removeBarcode: (productId: string, barcode: string) => Promise<BarcodeOpResult>;
   adjustStock: (productId: string, delta: number) => Promise<AdjustResult>;
   deleteProduct: (productId: string) => Promise<DeleteResult>;
+  /** 置顶 / 取消置顶；置顶时自动排到置顶区域末尾。 */
+  setPinned: (productId: string, pinned: boolean) => Promise<void>;
+  /** 按传入顺序重写置顶商品的 pinOrder，用于长按拖拽排序后落盘。 */
+  reorderPinned: (orderedIds: string[]) => Promise<void>;
   exportDatabase: (includeLogs?: boolean) => Promise<InventoryDatabase>;
   importDatabase: (raw: string, mode: ImportMode) => Promise<ImportResult>;
   clearDatabase: () => Promise<void>;
@@ -402,6 +406,40 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     [commit],
   );
 
+  const setPinned = useCallback(
+    (productId: string, pinned: boolean) =>
+      commit<void>((current) => {
+        const index = current.products.findIndex((item) => item.id === productId);
+        if (index < 0) return { next: current, result: undefined };
+        const product = current.products[index];
+        if (Boolean(product.isPinned) === pinned) return { next: current, result: undefined };
+        // 新置顶的商品排在现有置顶区域末尾；取消置顶则清掉排序索引。
+        const pinOrder = pinned
+          ? current.products.reduce((max, item) => (item.isPinned ? Math.max(max, item.pinOrder ?? 0) : max), -1) + 1
+          : undefined;
+        const updated: Product = { ...product, isPinned: pinned, pinOrder, updatedAt: Date.now() };
+        return {
+          next: { ...current, products: replaceProduct(current.products, index, updated) },
+          result: undefined,
+        };
+      }),
+    [commit],
+  );
+
+  const reorderPinned = useCallback(
+    (orderedIds: string[]) =>
+      commit<void>((current) => {
+        const rank = new Map(orderedIds.map((id, index) => [id, index]));
+        const products = current.products.map((product) => {
+          if (!product.isPinned) return product;
+          const order = rank.get(product.id);
+          return order === undefined ? product : { ...product, pinOrder: order };
+        });
+        return { next: { ...current, products }, result: undefined };
+      }),
+    [commit],
+  );
+
   const exportDatabase = useCallback(
     async (includeLogs = true): Promise<InventoryDatabase> => {
       // 必须先把本次「导出」日志写进状态并落盘（commit 内部 await AsyncStorage.setItem），
@@ -473,6 +511,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     removeBarcode,
     adjustStock,
     deleteProduct,
+    setPinned,
+    reorderPinned,
     exportDatabase,
     importDatabase,
     clearDatabase,

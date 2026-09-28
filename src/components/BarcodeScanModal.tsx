@@ -34,6 +34,7 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
   const [value, setValue] = useState('');
   const [pending, setPending] = useState<string | null>(null);
   const [cooling, setCooling] = useState(false);
+  const [torch, setTorch] = useState(false);
   const lastRef = useRef({ code: '', at: 0 });
   const coolTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -105,6 +106,7 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
             <CameraView
               style={StyleSheet.absoluteFill}
               facing="back"
+              enableTorch={torch}
               barcodeScannerSettings={{ barcodeTypes: [...BARCODE_TYPES] }}
               onBarcodeScanned={scanning ? handleScanned : undefined}
             />
@@ -124,14 +126,20 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
         )}
 
         <View style={[styles.top, { paddingTop: insets.top + 8 }]}>
-          <Pressable style={styles.close} onPress={onCancel}>
-            <Text style={styles.closeText}>关闭</Text>
+          <Pressable style={styles.iconButton} onPress={onCancel}>
+            <Text style={styles.iconText}>关闭</Text>
           </Pressable>
           <View style={styles.titleWrap}>
             <Text style={styles.title}>{title}</Text>
             <Text style={styles.hint}>{statusHint}</Text>
           </View>
-          <View style={styles.spacer} />
+          <Pressable
+            style={styles.iconButton}
+            onPress={() => setTorch((current) => !current)}
+            accessibilityLabel={torch ? '关闭补光' : '开启补光'}
+          >
+            <Text style={styles.iconText}>{torch ? '关灯' : '补光'}</Text>
+          </Pressable>
         </View>
 
         {granted ? <View style={styles.filler} /> : null}
@@ -219,7 +227,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
   },
-  close: {
+  iconButton: {
     minWidth: 52,
     height: 36,
     borderRadius: 18,
@@ -228,13 +236,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeText: {
+  iconText: {
     color: colors.white,
     fontSize: 13,
     fontWeight: '700',
-  },
-  spacer: {
-    minWidth: 52,
   },
   titleWrap: {
     flex: 1,

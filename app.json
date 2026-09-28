@@ -2,7 +2,7 @@
   "expo": {
     "name": "Inven Go",
     "slug": "inven-go",
-    "version": "1.2.0",
+    "version": "1.2.5",
     "orientation": "portrait",
     "icon": "./logo/Invengo-logo.png",
     "userInterfaceStyle": "light",
@@ -18,7 +18,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.VIBRATE"
       ]
     },
     "web": {

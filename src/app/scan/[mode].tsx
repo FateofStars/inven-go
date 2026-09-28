@@ -12,8 +12,11 @@ import { BARCODE_TYPES } from '@/lib/barcode';
 import type { Product } from '@/lib/types';
 import { colors } from '@/theme';
 
-/** 全局死锁时长：任意条码触发后 3 秒内忽略全部扫码事件。 */
+/** 全局死锁时长：命中有效商品后 3 秒内忽略全部扫码事件。 */
 const SCAN_LOCK_MS = 3000;
+
+/** 同一个「无效条码」的重复回流去重窗口：不锁死扫描，只是不让同一条码反复刷屏。 */
+const INVALID_ECHO_MS = 1500;
 
 type ScanMode = 'inbound' | 'outbound' | 'query';
 
@@ -47,10 +50,13 @@ const titles: Record<ScanMode, string> = {
 };
 
 const hints: Record<ScanMode, string> = {
-  inbound: '连续扫描，每次触发后冷却 3 秒。已有商品会直接加库存。',
-  outbound: '连续扫描，每次触发后冷却 3 秒。匹配后库存减 1，不会低于 0。',
-  query: '扫到商品后会暂停，并显示库存卡片。',
+  inbound: '将扫描框对准商品条码以增添库存或新建库存信息',
+  outbound: '将扫描框对准商品条码以减少库存',
+  query: '将扫描框对准商品条码以查询库存信息',
 };
+
+/** 进入 3 秒死锁冷却时，标题下方的引导文案统一切换为这一句。 */
+const COOLING_HINT = '冷却中，稍后即可重新扫描';
 
 function isScanMode(value: string): value is ScanMode {
   return value === 'inbound' || value === 'outbound' || value === 'query';
@@ -70,10 +76,14 @@ export default function ScanScreen() {
   const [bulkQuantity, setBulkQuantity] = useState(1);
   const [applying, setApplying] = useState(false);
   const [rescanning, setRescanning] = useState(false);
+  /** 与 lockRef 同步的可见状态：驱动标题下方文案在冷却期与默认引导之间切换。 */
+  const [cooling, setCooling] = useState(false);
   const [queryHit, setQueryHit] = useState<{ product: Product; barcode: string } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const lockRef = useRef(false);
+  /** 本次扫码结果尚未返回的极短窗口：防止异步期间对同一码重复计数。 */
+  const scanBusyRef = useRef(false);
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastId = useRef(0);
 
@@ -91,10 +101,12 @@ export default function ScanScreen() {
   /** 立刻上锁并开始 3 秒倒计时，倒计时结束自动解锁。 */
   const lockScan = () => {
     lockRef.current = true;
+    setCooling(true);
     if (lockTimer.current) clearTimeout(lockTimer.current);
     lockTimer.current = setTimeout(() => {
       lockRef.current = false;
       lockTimer.current = null;
+      setCooling(false);
     }, SCAN_LOCK_MS);
   };
 
@@ -103,73 +115,100 @@ export default function ScanScreen() {
     if (lockTimer.current) clearTimeout(lockTimer.current);
     lockTimer.current = null;
     lockRef.current = false;
+    setCooling(false);
   };
 
   /**
-   * 全局死锁：只要有一次扫码被受理，3 秒内拦截**所有**后续扫码事件。
-   * 不再按条码区分，因为摄像头对同一个条码的回调频率不稳定，按条码加锁仍会漏掉重复计数。
+   * 无效条码不进冷却，但对同一个无效条码做短暂去重：
+   * 摄像头对同一码会连续回调，这里只拦「同一个码的重复回流」，
+   * 换成另一个条码时立刻放行，从而支持无效商品的无缝连扫排查。
    */
-  const acceptScan = () => {
-    if (lockRef.current) return false;
-    lockScan();
-    return true;
+  const recentInvalid = useRef({ code: '', at: 0 });
+  const showInvalidScan = (code: string, next: Omit<ToastState, 'id'>) => {
+    const now = Date.now();
+    if (recentInvalid.current.code === code && now - recentInvalid.current.at < INVALID_ECHO_MS) return;
+    recentInvalid.current = { code, at: now };
+    showToast(next);
   };
 
+  /**
+   * 扫码分流策略：
+   * - 命中有效商品 → 立刻进入 3 秒全局死锁冷却，避免重复计数；
+   * - 无效/未登记商品 → 绝不锁死，允许立刻对准下一个条码。
+   * scanBusyRef 只看住「本次结果尚未返回」的极短窗口，防止异步期间重复受理。
+   */
   const onBarcodeScanned = (result: BarcodeScanningResult) => {
     const code = result.data.trim();
     if (!code) return;
-    if (!acceptScan()) return;
+    if (lockRef.current || scanBusyRef.current) return;
+
     if (composer && rescanning) {
       setComposer((current) => (current ? { ...current, barcode: code } : current));
       setRescanning(false);
+      lockScan();
       showToast({ message: '条码已填入', tone: 'info' });
       return;
     }
     if (composer || queryHit) return;
 
+    scanBusyRef.current = true;
+
     if (mode === 'inbound') {
-      void inboundScan(code).then((scan) => {
-        if (scan.kind === 'missing') {
+      void inboundScan(code)
+        .then((scan) => {
+          if (scan.kind === 'missing') {
+            showInvalidScan(code, {
+              message: '无此商品，点击提示框可添加商品',
+              tone: 'warning',
+              sticky: true,
+              actionHint: '点击此处添加',
+              barcode: code,
+            });
+            return;
+          }
+          lockScan();
           showToast({
-            message: '无此商品，点击提示框可添加商品',
-            tone: 'warning',
+            message: `添加成功 · ${scan.product.name} 库存 ${scan.product.stock}`,
+            tone: 'success',
             sticky: true,
-            actionHint: '点击此处添加',
-            barcode: code,
+            actionHint: '点击可修改本次入库数量',
+            bulk: { productId: scan.product.id, name: scan.product.name },
           });
-          return;
-        }
-        showToast({
-          message: `添加成功 · ${scan.product.name} 库存 ${scan.product.stock}`,
-          tone: 'success',
-          sticky: true,
-          actionHint: '点击可修改本次入库数量',
-          bulk: { productId: scan.product.id, name: scan.product.name },
+        })
+        .finally(() => {
+          scanBusyRef.current = false;
         });
-      });
       return;
     }
 
     if (mode === 'outbound') {
-      void outboundScan(code).then((scan) => {
-        if (scan.kind === 'missing') {
-          showToast({ message: '无此商品，请重新扫描', tone: 'warning' });
-          return;
-        }
-        if (scan.kind === 'empty') {
-          showToast({ message: `「${scan.name}」库存已为 0，无法出库`, tone: 'warning' });
-          return;
-        }
-        showToast({ message: `出库成功 · ${scan.product.name} 剩余 ${scan.product.stock}`, tone: 'success' });
-      });
+      void outboundScan(code)
+        .then((scan) => {
+          if (scan.kind === 'missing') {
+            showInvalidScan(code, { message: '无此商品，请重新扫描', tone: 'warning' });
+            return;
+          }
+          // 库存为 0 也是「有效商品」，同样进入冷却，避免反复刷同一条码。
+          lockScan();
+          if (scan.kind === 'empty') {
+            showToast({ message: `「${scan.name}」库存已为 0，无法出库`, tone: 'warning' });
+            return;
+          }
+          showToast({ message: `出库成功 · ${scan.product.name} 剩余 ${scan.product.stock}`, tone: 'success' });
+        })
+        .finally(() => {
+          scanBusyRef.current = false;
+        });
       return;
     }
 
     const product = findByBarcode(code);
+    scanBusyRef.current = false;
     if (!product) {
-      showToast({ message: '无此商品，请重新扫描', tone: 'warning' });
+      showInvalidScan(code, { message: '无此商品，请重新扫描', tone: 'warning' });
       return;
     }
+    lockScan();
     setToast(null);
     setQueryHit({ product, barcode: code });
   };
@@ -311,7 +350,9 @@ export default function ScanScreen() {
           </Pressable>
           <View style={styles.titleWrap}>
             <Text style={styles.title}>{titles[mode]}</Text>
-            <Text style={styles.hint}>{rescanning ? '对准新条码，扫描后自动返回表单' : hints[mode]}</Text>
+            <Text style={styles.hint}>
+              {rescanning ? '对准新条码，扫描后自动返回表单' : cooling ? COOLING_HINT : hints[mode]}
+            </Text>
           </View>
           <Pressable style={styles.iconButton} onPress={() => setTorch((value) => !value)}>
             <Text style={styles.iconText}>{torch ? '关灯' : '补光'}</Text>

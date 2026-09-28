@@ -7,6 +7,10 @@ export type Product = {
   barcodes: string[];
   createdAt: number;
   updatedAt: number;
+  /** 是否置顶：置顶商品在首页强制排在最前方的置顶区域。 */
+  isPinned?: boolean;
+  /** 置顶商品内的自定义排序索引，越小越靠前；未置顶商品不带此字段。 */
+  pinOrder?: number;
 };
 
 export type LogEntry = {

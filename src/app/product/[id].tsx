@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,6 +14,9 @@ import { colors, shadow } from '@/theme';
 
 /** 取码弹窗的用途：新增一个条码，或替换某个已有条码。 */
 type ScanTarget = { mode: 'add' } | { mode: 'edit'; barcode: string };
+
+/** 未置顶时「置顶」图标的低饱和中性灰。 */
+const PIN_MUTED = '#9CA3AF';
 
 type ToastState = { message: string; tone: ToastTone };
 
@@ -39,7 +42,8 @@ export default function ProductScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const productId = Array.isArray(params.id) ? params.id[0] : params.id;
   const insets = useSafeAreaInsets();
-  const { products, adjustStock, deleteProduct, addBarcode, replaceBarcode, removeBarcode } = useInventory();
+  const { products, adjustStock, deleteProduct, addBarcode, replaceBarcode, removeBarcode, setPinned } =
+    useInventory();
   const product = products.find((item) => item.id === productId);
   const [amount, setAmount] = useState('1');
   // notice 只承载「快速调整」卡片自己的反馈，条码相关的提示统一走底部 Toast。
@@ -70,6 +74,17 @@ export default function ProductScreen() {
       </View>
     );
   }
+
+  const pinned = product.isPinned === true;
+  const pinColor = pinned ? colors.green : PIN_MUTED;
+
+  const togglePin = async () => {
+    const next = !pinned;
+    // 置顶是轻量状态切换，只给一次很短的震动作为确认反馈。
+    Vibration.vibrate(next ? 18 : 12);
+    await setPinned(product.id, next);
+    showToast(next ? '已置顶该商品' : '已取消置顶', next ? 'success' : 'info');
+  };
 
   const apply = async (delta: number) => {
     if (pending) return;
@@ -111,7 +126,26 @@ export default function ProductScreen() {
     <View style={styles.root}>
       <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
         <View style={styles.hero}>
-          <Text style={styles.name}>{product.name}</Text>
+          <View style={styles.heroHead}>
+            <Text style={styles.name}>{product.name}</Text>
+            <Pressable
+              style={({ pressed }) => [styles.pinButton, pressed && styles.pressed]}
+              onPress={() => void togglePin()}
+              accessibilityLabel={pinned ? '取消置顶' : '置顶该商品'}
+            >
+              <View style={styles.pinIconWrap}>
+                <MaterialCommunityIcons name="format-vertical-align-top" size={22} color={pinColor} />
+                {pinned ? null : (
+                  <>
+                    {/* 先用与卡片同色的粗线留出「间隙」，再叠上灰色斜线，突出覆盖层次。 */}
+                    <View style={styles.pinSlashGap} />
+                    <View style={styles.pinSlash} />
+                  </>
+                )}
+              </View>
+              <Text style={[styles.pinLabel, { color: pinColor }]}>{pinned ? '已置顶' : '置顶'}</Text>
+            </Pressable>
+          </View>
           <Text style={[styles.stock, product.stock === 0 && styles.stockEmpty]}>{product.stock}</Text>
           <Text style={styles.stockLabel}>当前库存</Text>
           <Text style={styles.meta}>更新于 {formatTimestamp(product.updatedAt)}</Text>
@@ -312,9 +346,47 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
   },
+  heroHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
   name: {
+    flex: 1,
     color: colors.white,
     fontSize: 24,
+    fontWeight: '800',
+  },
+  pinButton: {
+    alignItems: 'center',
+    gap: 3,
+    paddingVertical: 2,
+    minWidth: 48,
+  },
+  pinIconWrap: {
+    width: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinSlashGap: {
+    position: 'absolute',
+    width: 5,
+    height: 26,
+    borderRadius: 3,
+    backgroundColor: colors.ink,
+    transform: [{ rotate: '45deg' }],
+  },
+  pinSlash: {
+    position: 'absolute',
+    width: 2,
+    height: 26,
+    borderRadius: 1,
+    backgroundColor: PIN_MUTED,
+    transform: [{ rotate: '45deg' }],
+  },
+  pinLabel: {
+    fontSize: 11,
     fontWeight: '800',
   },
   stock: {
