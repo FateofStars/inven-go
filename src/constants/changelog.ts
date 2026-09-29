@@ -20,6 +20,13 @@ export type ChangelogEntry = {
 
 export const CHANGELOG_DATA: ChangelogEntry[] = [
   {
+    version: '1.2.7',
+    items: [
+      '新增「点标题回到顶部」：库存首页、日志与更新日志页点一下标题即可平滑滚回列表顶部',
+      '「导入数据库」弹窗限高并支持整页滑动，快照较多时可在弹窗内滚动查看，不再顶到系统状态栏',
+    ],
+  },
+  {
     version: '1.2.6',
     items: [
       '修复置顶卡片拖拽松手后，目标位置会提前出现一张卡片、与悬浮卡重叠的问题',

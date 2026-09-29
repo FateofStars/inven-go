@@ -96,6 +96,7 @@ export default function InventoryScreen() {
   const cardWidth = Math.floor((width - 32 - 12) / 2);
 
   const rootRef = useRef<View>(null);
+  const listRef = useRef<FlatList<Product>>(null);
   const dragRef = useRef<DragState | null>(null);
   const targetRef = useRef(0);
   const cellHeightRef = useRef(0);
@@ -185,6 +186,11 @@ export default function InventoryScreen() {
 
   const notifyPinRequired = () => {
     setToast({ message: '请将卡片置顶后再拖动', tone: 'warning' });
+  };
+
+  /** 点标题平滑回到列表顶部。 */
+  const scrollToTop = () => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
   };
 
   /** 长按 0.5 秒后进入拖拽模式：全部逻辑跑在 JS 线程，不存在跨线程崩溃风险。 */
@@ -391,10 +397,17 @@ export default function InventoryScreen() {
         ) : (
           <>
             <View style={styles.titleWrap}>
-              <Text style={styles.title}>Inven Go</Text>
-              <Text style={styles.subtitle}>
-                {products.length} 种商品 · 共 {totalStock} 件
-              </Text>
+              {/* 热区只包住左边的标题文字，右侧搜索按钮保持独立可点。 */}
+              <Pressable
+                style={({ pressed }) => [styles.titleTap, pressed && styles.pressed]}
+                onPress={scrollToTop}
+                accessibilityLabel="回到顶部"
+              >
+                <Text style={styles.title}>Inven Go</Text>
+                <Text style={styles.subtitle}>
+                  {products.length} 种商品 · 共 {totalStock} 件
+                </Text>
+              </Pressable>
             </View>
             <Pressable
               style={({ pressed }) => [styles.searchButton, pressed && styles.pressed]}
@@ -409,6 +422,7 @@ export default function InventoryScreen() {
 
       <View style={styles.listWrap}>
         <FlatList
+          ref={listRef}
           data={unpinnedProducts}
           keyExtractor={(item) => item.id}
           numColumns={2}
@@ -591,6 +605,10 @@ const styles = StyleSheet.create({
   },
   titleWrap: {
     flex: 1,
+  },
+  /** 点击热区贴合标题文本宽度，不向右侧搜索按钮方向延展。 */
+  titleTap: {
+    alignSelf: 'flex-start',
   },
   title: {
     color: colors.ink,

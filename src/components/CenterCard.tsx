@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type DimensionValue,
 } from 'react-native';
 
 import { colors, shadow } from '@/theme';
@@ -22,6 +23,10 @@ type CenterCardProps = {
   confirmDisabled?: boolean;
   /** 纯选择型弹窗可以只保留一个关闭按钮。 */
   showConfirm?: boolean;
+  /** 内容超长可滚动时是否显示纵向滚动条；默认隐藏，保持弹窗观感干净。 */
+  showScrollIndicator?: boolean;
+  /** 卡片最大高度，默认占满可用区域；内容很长时可收紧以避免顶到状态栏。 */
+  cardMaxHeight?: DimensionValue;
   onConfirm: () => void;
   onCancel: () => void;
   children?: ReactNode;
@@ -36,6 +41,8 @@ export function CenterCard({
   confirmTone = 'teal',
   confirmDisabled = false,
   showConfirm = true,
+  showScrollIndicator = false,
+  cardMaxHeight = '100%',
   onConfirm,
   onCancel,
   children,
@@ -47,7 +54,7 @@ export function CenterCard({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
-        <View style={styles.card}>
+        <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
           <Text style={styles.title}>{title}</Text>
           {description ? <Text style={styles.description}>{description}</Text> : null}
           {children ? (
@@ -55,7 +62,7 @@ export function CenterCard({
               style={styles.content}
               contentContainerStyle={styles.contentInner}
               keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
+              showsVerticalScrollIndicator={showScrollIndicator}
             >
               {children}
             </ScrollView>
@@ -96,7 +103,6 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 420,
-    maxHeight: '100%',
     backgroundColor: colors.card,
     borderRadius: 24,
     padding: 22,

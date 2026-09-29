@@ -471,6 +471,8 @@ export default function SettingsScreen() {
         description="选择恢复通道，读取成功后再确认导入方式。"
         cancelLabel="关闭"
         showConfirm={false}
+        showScrollIndicator
+        cardMaxHeight="82%"
         onCancel={() => setImportOpen(false)}
         onConfirm={() => setImportOpen(false)}
       >
@@ -506,6 +508,7 @@ export default function SettingsScreen() {
         ) : snapshots.length === 0 ? (
           <Text style={styles.hint}>还没有本机快照。每次成功导出都会自动生成一份。</Text>
         ) : (
+          // 快照与上面的通道按钮同处一条滚动页：整页一起滑动，查看与操作更连贯。
           <View style={styles.rows}>
             {snapshots.map((snapshot) => (
               <PillRow

@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -57,6 +57,7 @@ export default function LogsScreen() {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<LogType | 'all'>('all');
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
+  const listRef = useRef<FlatList<LogEntry>>(null);
 
   // 离开本 Tab 时收起筛选面板并清空全部筛选条件，切回时直接是完整日志流水。
   useFocusEffect(
@@ -96,6 +97,11 @@ export default function LogsScreen() {
     setSearchOpen(false);
   };
 
+  /** 点标题平滑回到列表顶部。 */
+  const scrollToTop = () => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  };
+
   return (
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
@@ -127,10 +133,17 @@ export default function LogsScreen() {
         ) : (
           <>
             <View style={styles.titleWrap}>
-              <Text style={styles.title}>日志</Text>
-              <Text style={styles.subtitle}>
-                {filtering ? `筛选出 ${visible.length} / ${logs.length} 条` : `共 ${logs.length} 条记录`}
-              </Text>
+              {/* 热区只包住左边的标题文字，右侧筛选按钮保持独立可点。 */}
+              <Pressable
+                style={({ pressed }) => [styles.titleTap, pressed && styles.pressed]}
+                onPress={scrollToTop}
+                accessibilityLabel="回到顶部"
+              >
+                <Text style={styles.title}>日志</Text>
+                <Text style={styles.subtitle}>
+                  {filtering ? `筛选出 ${visible.length} / ${logs.length} 条` : `共 ${logs.length} 条记录`}
+                </Text>
+              </Pressable>
             </View>
             <Pressable
               style={({ pressed }) => [styles.searchButton, pressed && styles.pressed]}
@@ -183,6 +196,7 @@ export default function LogsScreen() {
       ) : null}
 
       <FlatList
+        ref={listRef}
         style={styles.list}
         contentContainerStyle={styles.content}
         data={visible}
@@ -262,6 +276,10 @@ const styles = StyleSheet.create({
   },
   titleWrap: {
     flex: 1,
+  },
+  /** 点击热区贴合标题文本宽度，不向右侧筛选按钮方向延展。 */
+  titleTap: {
+    alignSelf: 'flex-start',
   },
   title: {
     color: colors.ink,
