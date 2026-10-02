@@ -2,6 +2,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { EncodingType, readAsStringAsync } from 'expo-file-system/legacy';
 
 import { parseDatabase } from '@/lib/database';
+import { DEFAULT_DATABASE_ID } from '@/lib/databases';
 import type { InventoryDatabase } from '@/lib/types';
 
 /** 快照保存在 App 私有文档目录下，不会被系统清理缓存时删掉。 */
@@ -15,14 +16,15 @@ const SNAPSHOT_LIMIT = 5;
 const SNAPSHOT_PATTERN =
   /^backup_(\d{4})-(\d{2})-(\d{2})_(\d{2})-?(\d{2})(?:-(\d{2}))?\.json$/;
 
-let snapshotDirectory: Directory | null = null;
-
-/** 惰性获取，避免在模块加载阶段就去访问原生文件系统模块。 */
-function getSnapshotDirectory(): Directory {
-  if (!snapshotDirectory) {
-    snapshotDirectory = new Directory(Paths.document, SNAPSHOT_FOLDER);
-  }
-  return snapshotDirectory;
+/**
+ * 每座数据库的快照各自独立存放：
+ * - 默认数据库沿用升级前的根目录，老快照原地可见、无需搬迁；
+ * - 其余数据库各占一个以自身 id 命名的子目录，互不干扰。
+ */
+function getSnapshotDirectory(databaseId: string): Directory {
+  return databaseId === DEFAULT_DATABASE_ID
+    ? new Directory(Paths.document, SNAPSHOT_FOLDER)
+    : new Directory(Paths.document, SNAPSHOT_FOLDER, databaseId);
 }
 
 export type Snapshot = {
@@ -60,11 +62,12 @@ function parseSnapshotTime(name: string): number | null {
   ).getTime();
 }
 
-function listSnapshotEntries(): { file: File; name: string; createdAt: number }[] {
-  const directory = getSnapshotDirectory();
+function listSnapshotEntries(databaseId: string): { file: File; name: string; createdAt: number }[] {
+  const directory = getSnapshotDirectory(databaseId);
   if (!directory.exists) return [];
   const entries: { file: File; name: string; createdAt: number }[] = [];
   for (const entry of directory.list()) {
+    // 只认文件：默认库的根目录下还可能有其他数据库的快照子目录。
     if (!(entry instanceof File)) continue;
     const createdAt = parseSnapshotTime(entry.name);
     if (createdAt === null) continue;
@@ -75,10 +78,11 @@ function listSnapshotEntries(): { file: File; name: string; createdAt: number }[
 
 /**
  * 在 App 私有目录里静默保存一份快照，并只保留最近 {@link SNAPSHOT_LIMIT} 份。
+ * 快照严格归属传入的数据库，其他库看不到也删不掉。
  * 返回本次写入的快照信息；写入失败会抛出，由调用方决定是否忽略。
  */
-export function saveSnapshot(database: InventoryDatabase): Snapshot {
-  const directory = getSnapshotDirectory();
+export function saveSnapshot(databaseId: string, database: InventoryDatabase): Snapshot {
+  const directory = getSnapshotDirectory(databaseId);
   if (!directory.exists) {
     directory.create({ intermediates: true });
   }
@@ -87,7 +91,7 @@ export function saveSnapshot(database: InventoryDatabase): Snapshot {
   const file = new File(directory, name);
   file.write(JSON.stringify(database, null, 2));
 
-  const entries = listSnapshotEntries();
+  const entries = listSnapshotEntries(databaseId);
   for (const entry of entries.slice(SNAPSHOT_LIMIT)) {
     try {
       entry.file.delete();
@@ -106,10 +110,10 @@ export function saveSnapshot(database: InventoryDatabase): Snapshot {
   };
 }
 
-/** 列出本机快照（按时间倒序），顺带读出商品数与日志数用于展示。 */
-export async function listSnapshots(): Promise<Snapshot[]> {
+/** 列出某座数据库的本机快照（按时间倒序），顺带读出商品数与日志数用于展示。 */
+export async function listSnapshots(databaseId: string): Promise<Snapshot[]> {
   const snapshots: Snapshot[] = [];
-  for (const entry of listSnapshotEntries()) {
+  for (const entry of listSnapshotEntries(databaseId)) {
     try {
       const parsed = parseDatabase(await entry.file.text());
       if (!parsed) continue;
@@ -126,6 +130,16 @@ export async function listSnapshots(): Promise<Snapshot[]> {
     }
   }
   return snapshots;
+}
+
+/** 删除某座数据库的全部本机快照（删除数据库时一并清理，不留孤儿文件）。 */
+export function clearSnapshots(databaseId: string): void {
+  try {
+    const directory = getSnapshotDirectory(databaseId);
+    if (directory.exists) directory.delete();
+  } catch {
+    // 清理失败不阻断主流程：数据本身已经处理完了。
+  }
 }
 
 export function readSnapshotText(uri: string): Promise<string> {

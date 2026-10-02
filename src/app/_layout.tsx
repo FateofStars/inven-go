@@ -30,6 +30,7 @@ function RootNavigator() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="scan/[mode]" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
       <Stack.Screen name="product/[id]" options={{ title: '商品详情' }} />
+      <Stack.Screen name="database/index" options={{ title: '数据库管理' }} />
       <Stack.Screen name="about" options={{ title: '关于' }} />
       <Stack.Screen name="changelog" options={{ title: '更新日志' }} />
     </Stack>

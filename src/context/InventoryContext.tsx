@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { clearSnapshots } from '@/lib/backup';
 import {
-  STORAGE_KEY,
   createId,
   emptyDatabase,
   findProductByBarcode,
@@ -11,6 +11,21 @@ import {
   parseDatabase,
   trimLogs,
 } from '@/lib/database';
+import {
+  DEFAULT_DATABASE_ID,
+  DEFAULT_DATABASE_NAME,
+  dataKey,
+  listSummaries,
+  loadRegistry,
+  persistRegistry,
+  readDatabaseData,
+  removeDatabaseData,
+  summarize,
+  validateDatabaseName,
+  type DatabaseEntry,
+  type DatabaseRegistry,
+  type DatabaseSummary,
+} from '@/lib/databases';
 import type { ImportMode, InventoryDatabase, LogEntry, Product } from '@/lib/types';
 
 type CommitResult<T> = { next: InventoryDatabase; result: T };
@@ -51,10 +66,24 @@ export type BarcodeOpResult =
   | { kind: 'not-found' }
   | { kind: 'invalid' };
 
+/** 数据库管理类操作（新建 / 改名 / 切换 / 删除）的统一返回。 */
+export type DatabaseOpResult = { ok: true; message: string } | { ok: false; message: string };
+
 type InventoryContextValue = {
   ready: boolean;
   products: Product[];
   logs: LogEntry[];
+  /** 本机全部数据库的汇总信息；激活库的统计始终取自内存中的实时数据。 */
+  databases: DatabaseSummary[];
+  activeDatabaseId: string;
+  /** 重新读取各数据库的商品数、日志数与最后更新时间。 */
+  refreshDatabases: () => Promise<void>;
+  switchDatabase: (id: string) => Promise<DatabaseOpResult>;
+  createDatabase: (name: string, initialData?: InventoryDatabase) => Promise<DatabaseOpResult>;
+  renameDatabase: (id: string, name: string) => Promise<DatabaseOpResult>;
+  deleteDatabase: (id: string) => Promise<DatabaseOpResult>;
+  /** 清空本机全部数据库及其快照，并重建一个空的默认数据库。 */
+  resetDatabases: () => Promise<void>;
   findByBarcode: (barcode: string) => Product | undefined;
   inboundScan: (barcode: string) => Promise<InboundResult>;
   outboundScan: (barcode: string) => Promise<OutboundResult>;
@@ -70,9 +99,10 @@ type InventoryContextValue = {
   setPinned: (productId: string, pinned: boolean) => Promise<void>;
   /** 按传入顺序重写置顶商品的 pinOrder，用于长按拖拽排序后落盘。 */
   reorderPinned: (orderedIds: string[]) => Promise<void>;
-  exportDatabase: (includeLogs?: boolean) => Promise<InventoryDatabase>;
-  importDatabase: (raw: string, mode: ImportMode) => Promise<ImportResult>;
-  clearDatabase: () => Promise<void>;
+  /** 导出指定数据库（默认当前激活库）的数据包。 */
+  exportDatabase: (includeLogs?: boolean, databaseId?: string) => Promise<InventoryDatabase>;
+  /** 把备份导入指定数据库（默认当前激活库）。 */
+  importDatabase: (raw: string, mode: ImportMode, databaseId?: string) => Promise<ImportResult>;
 };
 
 const InventoryContext = createContext<InventoryContextValue | null>(null);
@@ -90,9 +120,15 @@ function normalizeQuantity(value: number | undefined): number {
   return floored >= 1 ? floored : 1;
 }
 
+/** 注册表尚未加载完成时的占位值（配合根组件的 ready 加载态，界面不会用到它）。 */
+const EMPTY_REGISTRY: DatabaseRegistry = { version: 1, activeId: DEFAULT_DATABASE_ID, items: [] };
+
 export function InventoryProvider({ children }: { children: ReactNode }) {
   const snapshotRef = useRef<InventoryDatabase>(emptyDatabase());
   const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const registryRef = useRef<DatabaseRegistry>(EMPTY_REGISTRY);
+  const [registry, setRegistry] = useState<DatabaseRegistry>(EMPTY_REGISTRY);
+  const [summaries, setSummaries] = useState<DatabaseSummary[]>([]);
   const [db, setDb] = useState<InventoryDatabase>(emptyDatabase());
   const [ready, setReady] = useState(false);
   const { products, logs } = db;
@@ -101,12 +137,16 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     let active = true;
     const load = async () => {
       try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (!active || !raw) return;
-        const parsed = parseDatabase(raw);
-        if (!parsed) return;
-        snapshotRef.current = parsed;
-        setDb(parsed);
+        // 升级后的第一次启动会在这里把旧版单库数据封装成「默认数据库」。
+        const loaded = await loadRegistry();
+        if (!active) return;
+        const data = await readDatabaseData(loaded.activeId);
+        if (!active) return;
+        registryRef.current = loaded;
+        snapshotRef.current = data;
+        setRegistry(loaded);
+        setDb(data);
+        setSummaries(await listSummaries(loaded));
       } finally {
         if (active) setReady(true);
       }
@@ -117,36 +157,58 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const commit = useCallback(<T,>(recipe: (current: InventoryDatabase) => CommitResult<T>): Promise<T> => {
-    let resolveResult: (value: T) => void = () => undefined;
-    let rejectResult: (reason: unknown) => void = () => undefined;
-    const resultPromise = new Promise<T>((resolve, reject) => {
-      resolveResult = resolve;
-      rejectResult = reject;
-    });
-
-    queueRef.current = queueRef.current.then(async () => {
-      const previous = snapshotRef.current;
-      try {
-        const { next, result } = recipe(previous);
-        const trimmed: InventoryDatabase = {
-          version: 1,
-          products: next.products,
-          logs: trimLogs(next.logs),
-        };
-        snapshotRef.current = trimmed;
-        setDb(trimmed);
-        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
-        resolveResult(result);
-      } catch (error) {
-        snapshotRef.current = previous;
-        setDb(previous);
-        rejectResult(error);
-      }
-    });
-
-    return resultPromise;
+  /** 把任务串到同一条队列上，保证「读 → 改 → 写」不会被并发交叉。 */
+  const runExclusive = useCallback(<T,>(task: () => Promise<T>): Promise<T> => {
+    const run = queueRef.current.then(task, task);
+    queueRef.current = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }, []);
+
+  /**
+   * 对指定数据库执行一次「读 → 改 → 写」。
+   * - 目标就是当前激活库时直接用内存数据，并同步刷新界面；
+   * - 目标是其他库时先从存储里读出来，写完只落盘、不打扰当前界面，
+   *   这样「对某座库导入/导出」不会影响正在使用的库。
+   */
+  const commitTo = useCallback(
+    <T,>(databaseId: string, recipe: (current: InventoryDatabase) => CommitResult<T>) =>
+      runExclusive(async () => {
+        const isActive = databaseId === registryRef.current.activeId;
+        const previous = isActive ? snapshotRef.current : null;
+        try {
+          const current = previous ?? (await readDatabaseData(databaseId));
+          const { next, result } = recipe(current);
+          const trimmed: InventoryDatabase = {
+            version: 1,
+            products: next.products,
+            logs: trimLogs(next.logs),
+          };
+          await AsyncStorage.setItem(dataKey(databaseId), JSON.stringify(trimmed));
+          if (isActive) {
+            snapshotRef.current = trimmed;
+            setDb(trimmed);
+          }
+          return { result, next: trimmed };
+        } catch (error) {
+          if (previous) {
+            snapshotRef.current = previous;
+            setDb(previous);
+          }
+          throw error;
+        }
+      }),
+    [runExclusive],
+  );
+
+  /** 对当前激活库的「读 → 改 → 写」，库存相关的全部操作都走这里。 */
+  const commit = useCallback(
+    <T,>(recipe: (current: InventoryDatabase) => CommitResult<T>): Promise<T> =>
+      commitTo(registryRef.current.activeId, recipe).then((outcome) => outcome.result),
+    [commitTo],
+  );
 
   const findByBarcode = useCallback(
     (barcode: string) => findProductByBarcode(db.products, barcode),
@@ -441,34 +503,39 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   );
 
   const exportDatabase = useCallback(
-    async (includeLogs = true): Promise<InventoryDatabase> => {
-      // 必须先把本次「导出」日志写进状态并落盘（commit 内部 await AsyncStorage.setItem），
+    async (includeLogs = true, databaseId?: string): Promise<InventoryDatabase> => {
+      // 必须先把本次「导出」日志写进状态并落盘（commitTo 内部 await AsyncStorage.setItem），
       // 之后才返回快照给调用方打包成 JSON。这样导出的文件里必然包含它自己这条导出记录，
       // 备份数据自闭环、可完整还原。
       // 关闭「包含日志」只影响导出的数据包，本机历史日志仍会照常保留、不被清空。
-      const entry = await commit<LogEntry>((current) => {
-        const detail = includeLogs
-          ? `导出数据库，商品 ${current.products.length} 个，日志 ${current.logs.length + 1} 条`
-          : `导出数据库（不含日志），商品 ${current.products.length} 个`;
-        const created = makeLog('export', detail);
-        return { next: { ...current, logs: [...current.logs, created] }, result: created };
-      });
-      const snapshot = snapshotRef.current;
+      const { result: entry, next } = await commitTo(
+        databaseId ?? registryRef.current.activeId,
+        (current) => {
+          const detail = includeLogs
+            ? `导出数据库，商品 ${current.products.length} 个，日志 ${current.logs.length + 1} 条`
+            : `导出数据库（不含日志），商品 ${current.products.length} 个`;
+          const created = makeLog('export', detail);
+          return { next: { ...current, logs: [...current.logs, created] }, result: created };
+        },
+      );
       if (includeLogs) {
-        return { version: 1, products: snapshot.products, logs: snapshot.logs };
+        return { version: 1, products: next.products, logs: next.logs };
       }
       // 不含日志时只保留本次导出这一条记录，保证因果闭环又不夹带历史流水。
-      return { version: 1, products: snapshot.products, logs: [entry], includeLogs: false };
+      return { version: 1, products: next.products, logs: [entry], includeLogs: false };
     },
-    [commit],
+    [commitTo],
   );
 
   const importDatabase = useCallback(
-    (raw: string, mode: ImportMode) => {
+    (raw: string, mode: ImportMode, databaseId?: string) => {
       const parsed = parseDatabase(raw);
       if (!parsed) return Promise.resolve({ ok: false as const, message: '文件内容不是可识别的库存数据库' });
-      return commit<ImportResult>((current) => {
-        const base = mode === 'replace' ? { version: 1 as const, products: parsed.products, logs: parsed.logs } : mergeDatabases(current, parsed);
+      return commitTo(databaseId ?? registryRef.current.activeId, (current) => {
+        const base =
+          mode === 'replace'
+            ? { version: 1 as const, products: parsed.products, logs: parsed.logs }
+            : mergeDatabases(current, parsed);
         const detail =
           mode === 'replace'
             ? `覆盖导入数据库，商品 ${base.products.length} 个，历史日志 ${base.logs.length} 条`
@@ -484,23 +551,159 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             includeLogs: parsed.includeLogs !== false,
           },
         };
-      });
+      }).then((outcome) => outcome.result);
     },
-    [commit],
+    [commitTo],
   );
 
-  const clearDatabase = useCallback(async () => {
-    // 高危不可逆操作：商品与日志一并重置为空，并把空库写回本地存储。
-    // 这里刻意不追加日志，保证清空后确实是「全空」状态。
-    await commit<null>(() => ({ next: emptyDatabase(), result: null }));
-  }, [commit]);
+  const refreshDatabases = useCallback(async () => {
+    setSummaries(await listSummaries(registryRef.current));
+  }, []);
 
-  // 这里不做手动 memo：Provider 只会在 db / ready 变化时重渲染，
+  const switchDatabase = useCallback(
+    (id: string) =>
+      runExclusive(async (): Promise<DatabaseOpResult> => {
+        const current = registryRef.current;
+        if (id === current.activeId) return { ok: true, message: '已经是当前使用的数据库' };
+        const entry = current.items.find((item) => item.id === id);
+        if (!entry) return { ok: false, message: '数据库不存在' };
+        const data = await readDatabaseData(id);
+        const next: DatabaseRegistry = { ...current, activeId: id };
+        await persistRegistry(next);
+        registryRef.current = next;
+        snapshotRef.current = data;
+        setRegistry(next);
+        setDb(data);
+        return { ok: true, message: `已切换至数据库：${entry.name}` };
+      }),
+    [runExclusive],
+  );
+
+  const createDatabase = useCallback(
+    (name: string, initialData?: InventoryDatabase) =>
+      runExclusive(async (): Promise<DatabaseOpResult> => {
+        const current = registryRef.current;
+        const check = validateDatabaseName(name, current.items);
+        if (!check.ok) return { ok: false, message: check.message };
+        const entry: DatabaseEntry = { id: createId(), name: check.name, createdAt: Date.now() };
+        // 传了初始数据（新建时的预导入）就以它作为新库的起点，否则建一个空库。
+        const data: InventoryDatabase = initialData
+          ? { version: 1, products: initialData.products, logs: trimLogs(initialData.logs) }
+          : emptyDatabase();
+        await AsyncStorage.setItem(dataKey(entry.id), JSON.stringify(data));
+        const next: DatabaseRegistry = { ...current, items: [...current.items, entry] };
+        await persistRegistry(next);
+        registryRef.current = next;
+        setRegistry(next);
+        setSummaries((list) => [...list, summarize(entry, data)]);
+        return { ok: true, message: `已创建数据库：${entry.name}` };
+      }),
+    [runExclusive],
+  );
+
+  const renameDatabase = useCallback(
+    (id: string, name: string) =>
+      runExclusive(async (): Promise<DatabaseOpResult> => {
+        const current = registryRef.current;
+        const entry = current.items.find((item) => item.id === id);
+        if (!entry) return { ok: false, message: '数据库不存在' };
+        // 允许与自身同名，只拦截与其他库的重名（英文不区分大小写）。
+        const check = validateDatabaseName(name, current.items, id);
+        if (!check.ok) return { ok: false, message: check.message };
+        const next: DatabaseRegistry = {
+          ...current,
+          items: current.items.map((item) => (item.id === id ? { ...item, name: check.name } : item)),
+        };
+        await persistRegistry(next);
+        registryRef.current = next;
+        setRegistry(next);
+        setSummaries((list) => list.map((item) => (item.id === id ? { ...item, name: check.name } : item)));
+        return { ok: true, message: `已重命名为：${check.name}` };
+      }),
+    [runExclusive],
+  );
+
+  const deleteDatabase = useCallback(
+    (id: string) =>
+      runExclusive(async (): Promise<DatabaseOpResult> => {
+        const current = registryRef.current;
+        if (current.items.length <= 1) return { ok: false, message: '至少需要保留一个数据库' };
+        const entry = current.items.find((item) => item.id === id);
+        if (!entry) return { ok: false, message: '数据库不存在' };
+
+        const rest = current.items.filter((item) => item.id !== id);
+        // 删掉正在使用的库时自动切到「默认数据库」，默认库已不在则退回列表中的第一个。
+        const fallback = rest.find((item) => item.id === DEFAULT_DATABASE_ID) ?? rest[0];
+        const wasActive = current.activeId === id;
+        const next: DatabaseRegistry = {
+          version: 1,
+          activeId: wasActive ? fallback.id : current.activeId,
+          items: rest,
+        };
+        await persistRegistry(next);
+        await removeDatabaseData(id);
+        // 该库自己的本机快照一并清理，不留孤儿文件。
+        clearSnapshots(id);
+        registryRef.current = next;
+        setRegistry(next);
+        if (wasActive) {
+          const data = await readDatabaseData(fallback.id);
+          snapshotRef.current = data;
+          setDb(data);
+        }
+        setSummaries(await listSummaries(next));
+        return { ok: true, message: `已删除数据库：${entry.name}` };
+      }),
+    [runExclusive],
+  );
+
+  const resetDatabases = useCallback(
+    () =>
+      runExclusive(async () => {
+        // 高危不可逆操作：清掉全部数据库的数据与快照，再重建一个空的默认数据库，
+        // 保证任何时刻都至少有一个可用库。这里刻意不追加日志，让重置后确实是「全空」状态。
+        for (const item of registryRef.current.items) {
+          await removeDatabaseData(item.id);
+          clearSnapshots(item.id);
+        }
+        const entry: DatabaseEntry = {
+          id: DEFAULT_DATABASE_ID,
+          name: DEFAULT_DATABASE_NAME,
+          createdAt: Date.now(),
+        };
+        const data = emptyDatabase();
+        await AsyncStorage.setItem(dataKey(entry.id), JSON.stringify(data));
+        const next: DatabaseRegistry = { version: 1, activeId: entry.id, items: [entry] };
+        await persistRegistry(next);
+        registryRef.current = next;
+        snapshotRef.current = data;
+        setRegistry(next);
+        setDb(data);
+        setSummaries([summarize(entry, data)]);
+      }),
+    [runExclusive],
+  );
+
+  /** 激活库的统计直接取内存实时数据，避免管理页返回时看到过期数字。 */
+  const databases = useMemo(
+    () => summaries.map((item) => (item.id === registry.activeId ? summarize(item, db) : item)),
+    [summaries, registry.activeId, db],
+  );
+
+  // 这里不做手动 memo：Provider 只会在 db / ready / 数据库列表变化时重渲染，
   // 而这正是 context 值必须更新的时机，手动 useMemo 没有实际收益。
   const value: InventoryContextValue = {
     ready,
     products,
     logs,
+    databases,
+    activeDatabaseId: registry.activeId,
+    refreshDatabases,
+    switchDatabase,
+    createDatabase,
+    renameDatabase,
+    deleteDatabase,
+    resetDatabases,
     findByBarcode,
     inboundScan,
     outboundScan,
@@ -515,7 +718,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     reorderPinned,
     exportDatabase,
     importDatabase,
-    clearDatabase,
   };
 
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;

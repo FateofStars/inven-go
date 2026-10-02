@@ -1,15 +1,16 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
+import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, Vibration, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarcodeScanModal } from '@/components/BarcodeScanModal';
 import { CenterCard } from '@/components/CenterCard';
+import { QuantityStepper } from '@/components/QuantityStepper';
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
 import { useInventory, type BarcodeOpResult } from '@/context/InventoryContext';
-import { formatTimestamp, parsePositiveInteger } from '@/lib/format';
+import { formatTimestamp } from '@/lib/format';
 import { colors, shadow } from '@/theme';
 
 /** 取码弹窗的用途：新增一个条码，或替换某个已有条码。 */
@@ -45,7 +46,16 @@ export default function ProductScreen() {
   const { products, adjustStock, deleteProduct, addBarcode, replaceBarcode, removeBarcode, setPinned } =
     useInventory();
   const product = products.find((item) => item.id === productId);
-  const [amount, setAmount] = useState('1');
+  const scrollRef = useRef<ScrollView>(null);
+  /** 「手动增减」面板在内容中的纵向位置，键盘弹出时据此把输入框滚进可视区。 */
+  const adjustPanelY = useRef(0);
+  /** 当前滚动位置，键盘弹出前先记下来，收起时原样退回。 */
+  const offsetRef = useRef(0);
+  /** 记录键盘弹出前的滚动位置：收起键盘后回到这里，避免页面一直停在被顶上去的位置。 */
+  const restoreOffset = useRef(0);
+  /** 键盘弹出期间用户是否自己滚动过：滚过就不再强行回位，避免和用户手势打架。 */
+  const userScrolled = useRef(false);
+  const [amount, setAmount] = useState(1);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, setPending] = useState(false);
@@ -59,6 +69,30 @@ export default function ProductScreen() {
     const timer = setTimeout(() => setToast(null), 2400);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  /**
+   * 键盘弹出会压缩可视高度，这里在键盘出现时主动把「手动增减」面板滚到可视区上方，
+   * 保证步进器的输入框不会被键盘挡住；键盘收起后再滚回原来的位置，
+   * 让输入框卡片跟着下移复位（页面上只有这一个输入框，触发源明确）。
+   */
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSubscription = Keyboard.addListener(showEvent, () => {
+      restoreOffset.current = offsetRef.current;
+      userScrolled.current = false;
+      scrollRef.current?.scrollTo({ y: Math.max(0, adjustPanelY.current - 8), animated: true });
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      // 用户自己滚过就直接停在他看的位置，不再拉回。
+      if (userScrolled.current) return;
+      scrollRef.current?.scrollTo({ y: restoreOffset.current, animated: true });
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   const showToast = (message: string, tone: ToastTone) => setToast({ message, tone });
 
@@ -97,13 +131,9 @@ export default function ProductScreen() {
     showToast(`库存已更新为 ${result.product.stock}`, delta < 0 ? 'info' : 'success');
   };
 
+  /** 按步进器里的数量执行一次增减（步进器保证数值始终是不小于 1 的整数）。 */
   const applyTyped = (direction: 1 | -1) => {
-    const value = parsePositiveInteger(amount);
-    if (value === null) {
-      showToast('请输入大于 0 的整数', 'warning');
-      return;
-    }
-    void apply(direction * value);
+    void apply(direction * amount);
   };
 
   const submitScanned = async (code: string) => {
@@ -127,7 +157,20 @@ export default function ProductScreen() {
 
   return (
     <View style={styles.root}>
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        scrollEventThrottle={16}
+        onScroll={(event) => {
+          offsetRef.current = event.nativeEvent.contentOffset.y;
+        }}
+        onScrollBeginDrag={() => {
+          userScrolled.current = true;
+        }}
+      >
         <View style={styles.hero}>
           <View style={styles.heroHead}>
             <Text style={styles.name}>{product.name}</Text>
@@ -154,7 +197,12 @@ export default function ProductScreen() {
           <Text style={styles.meta}>更新于 {formatTimestamp(product.updatedAt)}</Text>
         </View>
 
-        <View style={styles.panel}>
+        <View
+          style={styles.panel}
+          onLayout={(event) => {
+            adjustPanelY.current = event.nativeEvent.layout.y;
+          }}
+        >
           <Text style={styles.panelTitle}>快速调整</Text>
           <View style={styles.quickRow}>
             <Pressable
@@ -173,14 +221,8 @@ export default function ProductScreen() {
             </Pressable>
           </View>
           <Text style={styles.panelTitle}>手动增减</Text>
-          <TextInput
-            value={amount}
-            onChangeText={setAmount}
-            keyboardType="number-pad"
-            placeholder="输入数量"
-            placeholderTextColor={colors.muted}
-            style={styles.input}
-          />
+          {/* 与「修改本次入库数量」同一套步进器：三个独立卡片横向并排，中间可点开数字键盘。 */}
+          <QuantityStepper value={amount} onChange={setAmount} min={1} />
           <View style={styles.quickRow}>
             <Pressable
               style={({ pressed }) => [styles.minus, pressed && styles.pressed]}
@@ -277,7 +319,10 @@ export default function ProductScreen() {
           <Text style={styles.barcodeHint}>左滑条码可修改或删除。</Text>
         </View>
 
-        <Pressable style={styles.delete} onPress={() => setConfirmDelete(true)}>
+        <Pressable
+          style={({ pressed }) => [styles.delete, pressed && styles.pressed]}
+          onPress={() => setConfirmDelete(true)}
+        >
           <Text style={styles.deleteText}>删除商品</Text>
         </Pressable>
 
@@ -472,19 +517,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
   },
+  /** 统一按下反馈：轻微下沉 + 透明淡出。 */
   pressed: {
-    opacity: 0.75,
-  },
-  input: {
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 14,
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: '700',
+    opacity: 0.5,
+    transform: [{ scale: 0.96 }],
   },
   barcodeRow: {
     height: 46,

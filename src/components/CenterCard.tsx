@@ -19,10 +19,16 @@ type CenterCardProps = {
   description?: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  confirmTone?: 'teal' | 'danger';
+  confirmTone?: 'teal' | 'danger' | 'green' | 'navy';
   confirmDisabled?: boolean;
   /** 纯选择型弹窗可以只保留一个关闭按钮。 */
   showConfirm?: boolean;
+  /** 固定在滚动区之上、不随内容滚动的区块（例如「当前操作数据库」提示条）。 */
+  header?: ReactNode;
+  /** 位于按钮行下方的补充区块（例如「新建数据库」里可选的预导入入口）。 */
+  footer?: ReactNode;
+  /** 按钮行与上方内容的间距，默认 22；表单类弹窗可收紧到与内部节奏一致。 */
+  actionsSpacing?: number;
   /** 内容超长可滚动时是否显示纵向滚动条；默认隐藏，保持弹窗观感干净。 */
   showScrollIndicator?: boolean;
   /** 卡片最大高度，默认占满可用区域；内容很长时可收紧以避免顶到状态栏。 */
@@ -41,6 +47,9 @@ export function CenterCard({
   confirmTone = 'teal',
   confirmDisabled = false,
   showConfirm = true,
+  header,
+  footer,
+  actionsSpacing = 22,
   showScrollIndicator = false,
   cardMaxHeight = '100%',
   onConfirm,
@@ -57,6 +66,8 @@ export function CenterCard({
         <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
           <Text style={styles.title}>{title}</Text>
           {description ? <Text style={styles.description}>{description}</Text> : null}
+          {/* 固定头部：常驻在标题下方，不参与滚动。 */}
+          {header ? <View style={styles.headerBlock}>{header}</View> : null}
           {children ? (
             <ScrollView
               style={styles.content}
@@ -67,16 +78,20 @@ export function CenterCard({
               {children}
             </ScrollView>
           ) : null}
-          <View style={styles.actions}>
-            <Pressable style={styles.cancel} onPress={showConfirm ? onCancel : onConfirm}>
+          <View style={[styles.actions, { marginTop: actionsSpacing }]}>
+            <Pressable
+              style={({ pressed }) => [styles.cancel, pressed && styles.pressed]}
+              onPress={showConfirm ? onCancel : onConfirm}
+            >
               <Text style={styles.cancelText}>{cancelLabel}</Text>
             </Pressable>
             {showConfirm ? (
               <Pressable
-                style={[
+                style={({ pressed }) => [
                   styles.confirm,
-                  confirmTone === 'danger' ? styles.confirmDanger : styles.confirmTeal,
+                  confirmToneStyle[confirmTone],
                   confirmDisabled && styles.confirmDisabled,
+                  pressed && styles.pressed,
                 ]}
                 onPress={confirmDisabled ? undefined : onConfirm}
                 disabled={confirmDisabled}
@@ -86,11 +101,20 @@ export function CenterCard({
               </Pressable>
             ) : null}
           </View>
+          {/* 按钮行下方的补充区块：例如「新建数据库」里可选的预导入入口。 */}
+          {footer ? <View style={styles.footerBlock}>{footer}</View> : null}
         </View>
       </KeyboardAvoidingView>
     </Modal>
   );
 }
+
+const confirmToneStyle = {
+  teal: { backgroundColor: colors.teal },
+  danger: { backgroundColor: colors.danger },
+  green: { backgroundColor: colors.green },
+  navy: { backgroundColor: colors.navy },
+} as const;
 
 const styles = StyleSheet.create({
   backdrop: {
@@ -113,7 +137,10 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   contentInner: {
+    /** 首个子元素与说明文字之间、以及各区块之间统一留出 12px 的垂直节奏。 */
+    paddingTop: 12,
     paddingBottom: 2,
+    gap: 12,
   },
   title: {
     color: colors.ink,
@@ -126,8 +153,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  headerBlock: {
+    marginTop: 12,
+  },
+  footerBlock: {
+    marginTop: 12,
+  },
   actions: {
-    marginTop: 22,
     flexDirection: 'row',
     gap: 12,
   },
@@ -153,12 +185,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  confirmTeal: {
-    backgroundColor: colors.teal,
-  },
-  confirmDanger: {
-    backgroundColor: colors.danger,
-  },
   confirmDisabled: {
     opacity: 0.4,
   },
@@ -166,5 +192,10 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 16,
     fontWeight: '700',
+  },
+  /** 统一按下反馈：轻微下沉 + 透明淡出。 */
+  pressed: {
+    opacity: 0.5,
+    transform: [{ scale: 0.96 }],
   },
 });
