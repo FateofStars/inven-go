@@ -1,8 +1,9 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { QuantityStepper } from '@/components/QuantityStepper';
-import { colors, shadow } from '@/theme';
+import { SheetModal } from '@/components/SheetModal';
+import { colors } from '@/theme';
 
 type QuantitySheetProps = {
   visible: boolean;
@@ -33,53 +34,38 @@ export function QuantitySheet({
   const insets = useSafeAreaInsets();
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.flex}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={[styles.sheet, { paddingBottom: insets.bottom + 18 }]}>
-          <View style={styles.handle} />
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.name}>{productName}</Text>
-          {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+    <SheetModal visible={visible} onRequestClose={onClose} sheetStyle={{ paddingBottom: insets.bottom + 18 }}>
+      <View style={styles.handle} />
+      {/* 可用高度不够时（例如小屏 + 键盘）由这里滚动，底部的取消/确认始终留在键盘之上。 */}
+      <ScrollView style={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.name}>{productName}</Text>
+        {hint ? <Text style={styles.hint}>{hint}</Text> : null}
 
-          <Text style={styles.label}>入库数量</Text>
-          <QuantityStepper value={quantity} onChange={onChangeQuantity} />
+        <Text style={styles.label}>入库数量</Text>
+        <QuantityStepper value={quantity} onChange={onChangeQuantity} />
+      </ScrollView>
 
-          <View style={styles.actions}>
-            <Pressable style={styles.cancel} onPress={onClose} disabled={busy}>
-              <Text style={styles.cancelText}>取消</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.confirm, busy && styles.disabled]}
-              onPress={onConfirm}
-              disabled={busy}
-              accessibilityState={{ disabled: busy }}
-            >
-              <Text style={styles.confirmText}>{busy ? '处理中…' : confirmLabel}</Text>
-            </Pressable>
-          </View>
-        </View>
+      <View style={styles.actions}>
+        <Pressable style={styles.cancel} onPress={onClose} disabled={busy}>
+          <Text style={styles.cancelText}>取消</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.confirm, busy && styles.disabled]}
+          onPress={onConfirm}
+          disabled={busy}
+          accessibilityState={{ disabled: busy }}
+        >
+          <Text style={styles.confirmText}>{busy ? '处理中…' : confirmLabel}</Text>
+        </Pressable>
       </View>
-    </Modal>
+    </SheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: colors.scrim,
-  },
-  sheet: {
-    backgroundColor: colors.card,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 10,
-    paddingHorizontal: 18,
-    ...shadow,
+  body: {
+    flexShrink: 1,
   },
   handle: {
     alignSelf: 'center',
