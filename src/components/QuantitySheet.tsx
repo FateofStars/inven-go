@@ -12,13 +12,18 @@ type QuantitySheetProps = {
   hint?: string;
   quantity: number;
   onChangeQuantity: (value: number) => void;
+  /**
+   * 数量下限，默认 1。
+   * 入库补录场景传「本次已入库件数」：面板只负责追加，不会把已经入库的量往下改。
+   */
+  min?: number;
   confirmLabel?: string;
   busy?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 };
 
-/** 从底部升起的数量录入面板，用于扫码命中后修改本次入库数量。 */
+/** 从底部升起的数量录入面板，用于扫码命中或新增商品后修改本次入库数量。 */
 export function QuantitySheet({
   visible,
   title,
@@ -26,6 +31,7 @@ export function QuantitySheet({
   hint,
   quantity,
   onChangeQuantity,
+  min = 1,
   confirmLabel = '确认入库',
   busy = false,
   onConfirm,
@@ -43,7 +49,7 @@ export function QuantitySheet({
         {hint ? <Text style={styles.hint}>{hint}</Text> : null}
 
         <Text style={styles.label}>入库数量</Text>
-        <QuantityStepper value={quantity} onChange={onChangeQuantity} />
+        <QuantityStepper value={quantity} onChange={onChangeQuantity} min={min} />
       </ScrollView>
 
       <View style={styles.actions}>

@@ -28,8 +28,13 @@ type Composer = {
   quantity: number;
 };
 
-/** 入库命中后可点开补录数量的目标商品。 */
-type BulkTarget = { productId: string; name: string };
+/**
+ * 入库成功后可点开补录数量的目标商品。
+ *
+ * `applied` 是本次**已经入库**的件数：扫码命中固定为 1，新增商品（新建品类或把条码绑到已有商品）
+ * 为表单里填写的数量。面板用它作为初始值与下限，确认时只补录差额。
+ */
+type BulkTarget = { productId: string; name: string; applied: number };
 
 type ToastState = {
   id: number;
@@ -172,7 +177,7 @@ export default function ScanScreen() {
             tone: 'success',
             sticky: true,
             actionHint: '点击可修改本次入库数量',
-            bulk: { productId: scan.product.id, name: scan.product.name },
+            bulk: { productId: scan.product.id, name: scan.product.name, applied: 1 },
           });
         })
         .finally(() => {
@@ -222,7 +227,8 @@ export default function ScanScreen() {
 
   const openBulkSheet = (target: BulkTarget) => {
     setToast(null);
-    setBulkQuantity(1);
+    // 初始值就是本次已经入库的件数：用户往上加多少，确认时就补录多少。
+    setBulkQuantity(target.applied);
     setBulk(target);
   };
 
@@ -242,11 +248,11 @@ export default function ScanScreen() {
   const submitBulk = async () => {
     if (!bulk || applying) return;
     const target = bulk;
-    // 扫码时已经 +1，这里只把差额补上。
-    const delta = bulkQuantity - 1;
+    // 扫码命中或提交添加商品表单时已经入库 applied 件，这里只把差额补上。
+    const delta = bulkQuantity - target.applied;
     if (delta === 0) {
       setBulk(null);
-      showToast({ message: `「${target.name}」保持入库 1 件`, tone: 'info' });
+      showToast({ message: `「${target.name}」保持入库 ${target.applied} 件`, tone: 'info' });
       return;
     }
     setApplying(true);
@@ -284,7 +290,16 @@ export default function ScanScreen() {
           return;
         }
         setComposer(null);
-        showToast({ message: `添加成功 · ${result.product.name} 库存 ${result.product.stock}`, tone: 'success' });
+        // 与扫码命中保持一致：入库成功后先进入冷却，留出点击提示条补录差额的时间。
+        lockScan();
+        // 绑定条码时已按表单数量入库，与扫码命中一样可以点开面板补录差额。
+        showToast({
+          message: `添加成功 · ${result.product.name} 库存 ${result.product.stock}`,
+          tone: 'success',
+          sticky: true,
+          actionHint: '点击可修改本次入库数量',
+          bulk: { productId: result.product.id, name: result.product.name, applied: composer.quantity },
+        });
         return;
       }
 
@@ -302,7 +317,16 @@ export default function ScanScreen() {
         return;
       }
       setComposer(null);
-      showToast({ message: `添加成功 · ${result.product.name}`, tone: 'success' });
+      // 与扫码命中保持一致：入库成功后先进入冷却，留出点击提示条补录差额的时间。
+      lockScan();
+      // 新品类已按表单数量入库，同样可以点开面板继续追加入库。
+      showToast({
+        message: `添加成功 · ${result.product.name} 库存 ${result.product.stock}`,
+        tone: 'success',
+        sticky: true,
+        actionHint: '点击可修改本次入库数量',
+        bulk: { productId: result.product.id, name: result.product.name, applied: composer.quantity },
+      });
     } finally {
       setSubmitting(false);
     }
@@ -415,7 +439,8 @@ export default function ScanScreen() {
         visible={bulk !== null}
         title="修改本次入库数量"
         productName={bulk?.name ?? ''}
-        hint="扫描时已自动入库 1 件，这里填写本次实际入库的总数量，确认后补录差额。"
+        hint={`本次已入库 ${bulk?.applied ?? 1} 件，需要更多时在这里填写本次实际入库的总数量，确认后补录差额。`}
+        min={bulk?.applied ?? 1}
         quantity={bulkQuantity}
         onChangeQuantity={setBulkQuantity}
         busy={applying}
