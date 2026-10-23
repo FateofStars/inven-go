@@ -16,10 +16,14 @@ export function barcodeSummary(barcodes: string[]): string {
   return `${head} 等 ${barcodes.length} 个`;
 }
 
-export function parsePositiveInteger(text: string): number | null {
+/**
+ * 把数量输入框的文本解析成整数，0 属于合法结果（用户删空后的临时态）。
+ * 空内容或含非数字字符时返回 null，由调用方决定「回填 0」还是忽略。
+ */
+export function parseQuantityInput(text: string): number | null {
   const normalized = text.trim().replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
   if (!/^\d+$/.test(normalized)) return null;
   const value = Number(normalized);
-  if (!Number.isInteger(value) || value <= 0) return null;
+  if (!Number.isSafeInteger(value)) return null;
   return value;
 }

@@ -227,8 +227,9 @@ export default function ScanScreen() {
 
   const openBulkSheet = (target: BulkTarget) => {
     setToast(null);
-    // 初始值就是本次已经入库的件数：用户往上加多少，确认时就补录多少。
-    setBulkQuantity(target.applied);
+    // 初始值不低于 2：扫码命中固定已入库 1 件，面板打开时默认按 2 件起改；
+    // 表单里已经入库更多件时就以已入库数量为初始值。
+    setBulkQuantity(Math.max(target.applied, 2));
     setBulk(target);
   };
 
@@ -247,6 +248,11 @@ export default function ScanScreen() {
 
   const submitBulk = async () => {
     if (!bulk || applying) return;
+    // 删空输入框后数值会停在 0：拦截提交，避免产生 0 变动的脏数据。
+    if (bulkQuantity <= 0) {
+      showToast({ message: '操作数量必须大于 0', tone: 'warning' });
+      return;
+    }
     const target = bulk;
     // 扫码命中或提交添加商品表单时已经入库 applied 件，这里只把差额补上。
     const delta = bulkQuantity - target.applied;
@@ -274,6 +280,10 @@ export default function ScanScreen() {
     const barcode = composer.barcode.trim();
     if (!barcode) {
       setFormError('请填写条形码');
+      return;
+    }
+    if (composer.quantity <= 0) {
+      setFormError('操作数量必须大于 0');
       return;
     }
     setSubmitting(true);

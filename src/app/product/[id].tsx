@@ -55,7 +55,7 @@ export default function ProductScreen() {
   const restoreOffset = useRef(0);
   /** 键盘弹出期间用户是否自己滚动过：滚过就不再强行回位，避免和用户手势打架。 */
   const userScrolled = useRef(false);
-  const [amount, setAmount] = useState(1);
+  const [amount, setAmount] = useState(2);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, setPending] = useState(false);
@@ -131,8 +131,12 @@ export default function ProductScreen() {
     showToast(`库存已更新为 ${result.product.stock}`, delta < 0 ? 'info' : 'success');
   };
 
-  /** 按步进器里的数量执行一次增减（步进器保证数值始终是不小于 1 的整数）。 */
+  /** 按步进器里的数量执行一次增减（数量为 0 时拦截，避免提交空变动）。 */
   const applyTyped = (direction: 1 | -1) => {
+    if (amount <= 0) {
+      showToast('操作数量必须大于 0', 'warning');
+      return;
+    }
     void apply(direction * amount);
   };
 
@@ -222,7 +226,7 @@ export default function ProductScreen() {
           </View>
           <Text style={styles.panelTitle}>手动增减</Text>
           {/* 与「修改本次入库数量」同一套步进器：三个独立卡片横向并排，中间可点开数字键盘。 */}
-          <QuantityStepper value={amount} onChange={setAmount} min={1} />
+          <QuantityStepper value={amount} onChange={setAmount} min={0} />
           <View style={styles.quickRow}>
             <Pressable
               style={({ pressed }) => [styles.minus, pressed && styles.pressed]}
