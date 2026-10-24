@@ -1,14 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { colors, shadow } from '@/theme';
+import { colors, elevation, press, radius, space, textScale, type, weight } from '@/theme';
 
 export type ToastTone = 'success' | 'warning' | 'info';
-
-/**
- * 副标题（actionHint）使用的暖黄色。
- * 导出出来给「同一底色、不同字色」的场景复用，避免各处硬编码色值。
- */
-export const TOAST_HINT_COLOR = '#F3D7B5';
 
 type ToastBarProps = {
   message: string;
@@ -21,9 +15,9 @@ type ToastBarProps = {
 };
 
 const toneStyle = {
-  success: { background: '#173F2E', label: colors.white },
-  warning: { background: '#6E3B16', label: '#FFF4E8' },
-  info: { background: '#1C2E52', label: colors.white },
+  success: { background: colors.toastSuccessBg, label: colors.white },
+  warning: { background: colors.toastWarningBg, label: colors.toastWarningText },
+  info: { background: colors.toastInfoBg, label: colors.white },
 } as const;
 
 export function ToastBar({ message, tone, messageColor, actionHint, onPress, bottom }: ToastBarProps) {
@@ -40,8 +34,8 @@ export function ToastBar({ message, tone, messageColor, actionHint, onPress, bot
       ]}
     >
       <View style={styles.copy}>
-        <Text style={[styles.message, { color: messageColor ?? palette.label }]}>{message}</Text>
-        {actionHint ? <Text style={styles.hint}>{actionHint}</Text> : null}
+        <Text maxFontSizeMultiplier={textScale.body} style={[styles.message, { color: messageColor ?? palette.label }]}>{message}</Text>
+        {actionHint ? <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>{actionHint}</Text> : null}
       </View>
     </Pressable>
   );
@@ -50,26 +44,26 @@ export function ToastBar({ message, tone, messageColor, actionHint, onPress, bot
 const styles = StyleSheet.create({
   bar: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    ...shadow,
+    left: space.lg,
+    right: space.lg,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    ...elevation.float,
   },
   copy: {
-    gap: 4,
+    gap: space.xs,
   },
   pressed: {
-    opacity: 0.8,
+    opacity: press.opacity,
   },
   message: {
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 21,
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   hint: {
-    color: TOAST_HINT_COLOR,
-    fontSize: 13,
+    color: colors.toastHint,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
 });

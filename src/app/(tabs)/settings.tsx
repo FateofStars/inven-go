@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PillRow } from '@/components/PillRow';
 import { getAppVersion } from '@/constants/appInfo';
 import { useInventory } from '@/context/InventoryContext';
-import { colors } from '@/theme';
+import { colors, radius, space, textScale, type, weight } from '@/theme';
 
 export default function SettingsScreen() {
   const { products, logs, databases, activeDatabaseId } = useInventory();
@@ -20,6 +20,7 @@ export default function SettingsScreen() {
       text: '查看、管理及切换数据库',
       icon: 'database-outline' as const,
       color: colors.green,
+      titleColor: colors.greenStrong,
       soft: colors.greenSoft,
       onPress: () => router.push('/database'),
     },
@@ -30,6 +31,7 @@ export default function SettingsScreen() {
       icon: 'information-outline' as const,
       // 沿用【日志】页「导出」日志的配色，保持整套系统主题色一致。
       color: colors.warning,
+      titleColor: colors.warningStrong,
       soft: colors.warningSoft,
       onPress: () => router.push('/about'),
     },
@@ -37,20 +39,22 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         <View style={styles.titleWrap}>
-          <Text style={styles.title}>设置</Text>
-          <Text style={styles.subtitle}>软件数据管理</Text>
+          <Text style={styles.title} maxFontSizeMultiplier={textScale.title}>
+            设置
+          </Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.subtitle}>软件数据管理</Text>
         </View>
       </View>
 
       <View style={styles.body}>
         <View style={styles.summary}>
-          <Text style={styles.summaryLabel}>{`当前数据库：${activeName}`}</Text>
-          <Text style={styles.summaryValue}>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.summaryLabel}>{`当前数据库：${activeName}`}</Text>
+          <Text style={styles.summaryValue} maxFontSizeMultiplier={textScale.title}>
             {products.length} 个商品 · {logs.length} 条日志
           </Text>
-          <Text style={styles.summaryHint}>库存、条码关系和全部日志都保存在这台设备上。</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.summaryHint}>库存、条码关系和全部日志都保存在这台设备上。</Text>
         </View>
 
         <View style={styles.actions}>
@@ -59,6 +63,7 @@ export default function SettingsScreen() {
               key={action.key}
               icon={action.icon}
               color={action.color}
+              titleColor={action.titleColor}
               soft={action.soft}
               title={action.title}
               text={action.text}
@@ -79,52 +84,53 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.md,
   },
   titleWrap: {
     flex: 1,
   },
   title: {
+    ...type.display,
     color: colors.ink,
-    fontSize: 24,
-    fontWeight: '800',
+    fontWeight: weight.bold,
   },
   subtitle: {
-    marginTop: 3,
+    marginTop: space.xs,
+    ...type.caption,
     color: colors.muted,
-    fontSize: 13,
-    fontWeight: '600',
+    fontWeight: weight.regular,
   },
   body: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    gap: 12,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.lg,
+    gap: space.md,
   },
   summary: {
     backgroundColor: colors.ink,
-    borderRadius: 22,
-    padding: 18,
-    gap: 6,
+    borderRadius: radius.xl,
+    padding: space.xl,
+    gap: space.sm,
   },
   summaryLabel: {
-    color: '#D9CBB8',
-    fontSize: 13,
-    fontWeight: '700',
+    color: colors.onInkMuted,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
   summaryValue: {
-    color: colors.white,
-    fontSize: 20,
-    fontWeight: '800',
+    color: colors.onInk,
+    ...type.heading,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
   },
   summaryHint: {
-    color: '#C8BEB0',
-    fontSize: 13,
-    lineHeight: 19,
+    color: colors.onInkFaint,
+    ...type.body,
+    fontWeight: weight.regular,
   },
   actions: {
-    gap: 10,
+    gap: space.md,
   },
 });

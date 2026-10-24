@@ -11,13 +11,13 @@ import { QuantityStepper } from '@/components/QuantityStepper';
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
 import { useInventory, type BarcodeOpResult } from '@/context/InventoryContext';
 import { formatTimestamp } from '@/lib/format';
-import { colors, shadow } from '@/theme';
+import { colors, elevation, press, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 /** 取码弹窗的用途：新增一个条码，或替换某个已有条码。 */
 type ScanTarget = { mode: 'add' } | { mode: 'edit'; barcode: string };
 
-/** 未置顶时「置顶」图标的低饱和中性灰。 */
-const PIN_MUTED = '#9CA3AF';
+/** 未置顶时「置顶」图标取统一的中性灰 token。 */
+const PIN_MUTED = colors.pinMuted;
 
 type ToastState = { message: string; tone: ToastTone };
 
@@ -55,7 +55,7 @@ export default function ProductScreen() {
   const restoreOffset = useRef(0);
   /** 键盘弹出期间用户是否自己滚动过：滚过就不再强行回位，避免和用户手势打架。 */
   const userScrolled = useRef(false);
-  const [amount, setAmount] = useState(2);
+  const [amount, setAmount] = useState(1);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, setPending] = useState(false);
@@ -99,16 +99,20 @@ export default function ProductScreen() {
   if (!product) {
     return (
       <View style={styles.missing}>
-        <Text style={styles.missingTitle}>未找到该商品</Text>
+        <Text style={styles.missingTitle} maxFontSizeMultiplier={textScale.title}>
+          未找到该商品
+        </Text>
         <Pressable style={styles.primary} onPress={() => router.back()}>
-          <Text style={styles.primaryText}>返回库存</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.primaryText}>返回库存</Text>
         </Pressable>
       </View>
     );
   }
 
   const pinned = product.isPinned === true;
-  const pinColor = pinned ? colors.green : PIN_MUTED;
+  // 深色 hero 上：图标用浅薄荷（保留「绿色 = 已置顶」的本义），文字用暖白或暖灰。
+  const pinIconColor = pinned ? colors.greenSoft : PIN_MUTED;
+  const pinLabelColor = pinned ? colors.onInk : colors.onInkMuted;
 
   const togglePin = async () => {
     const next = !pinned;
@@ -177,14 +181,17 @@ export default function ProductScreen() {
       >
         <View style={styles.hero}>
           <View style={styles.heroHead}>
-            <Text style={styles.name}>{product.name}</Text>
+            <Text style={styles.name} maxFontSizeMultiplier={textScale.title}>
+              {product.name}
+            </Text>
             <Pressable
               style={({ pressed }) => [styles.pinButton, pressed && styles.pressed]}
               onPress={() => void togglePin()}
               accessibilityLabel={pinned ? '取消置顶' : '置顶该商品'}
+              hitSlop={space.sm}
             >
               <View style={styles.pinIconWrap}>
-                <MaterialCommunityIcons name="format-vertical-align-top" size={22} color={pinColor} />
+                <MaterialCommunityIcons name="format-vertical-align-top" size={14} color={pinIconColor} />
                 {pinned ? null : (
                   <>
                     {/* 先用与卡片同色的粗线留出「间隙」，再叠上灰色斜线，突出覆盖层次。 */}
@@ -193,12 +200,16 @@ export default function ProductScreen() {
                   </>
                 )}
               </View>
-              <Text style={[styles.pinLabel, { color: pinColor }]}>{pinned ? '已置顶' : '置顶'}</Text>
+              <Text style={[styles.pinLabel, { color: pinLabelColor }]} maxFontSizeMultiplier={1.2}>
+                {pinned ? '已置顶' : '置顶'}
+              </Text>
             </Pressable>
           </View>
-          <Text style={styles.stockLabel}>当前库存</Text>
-          <Text style={[styles.stock, product.stock === 0 && styles.stockEmpty]}>{product.stock}</Text>
-          <Text style={styles.meta}>更新于 {formatTimestamp(product.updatedAt)}</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.stockLabel}>当前库存</Text>
+          <Text style={[styles.stock, product.stock === 0 && styles.stockEmpty]} maxFontSizeMultiplier={textScale.number}>
+            {product.stock}
+          </Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.meta}>更新于 {formatTimestamp(product.updatedAt)}</Text>
         </View>
 
         <View
@@ -207,57 +218,45 @@ export default function ProductScreen() {
             adjustPanelY.current = event.nativeEvent.layout.y;
           }}
         >
-          <Text style={styles.panelTitle}>快速调整</Text>
-          <View style={styles.quickRow}>
-            <Pressable
-              style={({ pressed }) => [styles.minus, pressed && styles.pressed]}
-              onPress={() => void apply(-1)}
-              disabled={pending}
-            >
-              <Text style={styles.minusText}>-1</Text>
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [styles.plus, pressed && styles.pressed]}
-              onPress={() => void apply(1)}
-              disabled={pending}
-            >
-              <Text style={styles.plusText}>+1</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.panelTitle}>手动增减</Text>
-          {/* 与「修改本次入库数量」同一套步进器：三个独立卡片横向并排，中间可点开数字键盘。 */}
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.panelTitle}>调整库存</Text>
+          {/* 数量与提交合为一组：数量保持 1 时就是原来的快捷 ±1，输入更大数值则一次增减多件。 */}
           <QuantityStepper value={amount} onChange={setAmount} min={0} />
           <View style={styles.quickRow}>
             <Pressable
-              style={({ pressed }) => [styles.minus, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.minus, pending && styles.disabled, pressed && styles.pressed]}
               onPress={() => applyTyped(-1)}
               disabled={pending}
+              accessibilityLabel={`减少 ${amount} 件`}
+              accessibilityState={{ disabled: pending }}
             >
-              <Text style={styles.minusText}>减少</Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.minusText}>减少</Text>
             </Pressable>
             <Pressable
-              style={({ pressed }) => [styles.plus, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.plus, pending && styles.disabled, pressed && styles.pressed]}
               onPress={() => applyTyped(1)}
               disabled={pending}
+              accessibilityLabel={`增加 ${amount} 件`}
+              accessibilityState={{ disabled: pending }}
             >
-              <Text style={styles.plusText}>增加</Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.plusText}>增加</Text>
             </Pressable>
           </View>
         </View>
 
         <View style={styles.panel}>
           <View style={styles.panelHead}>
-            <Text style={styles.panelTitle}>绑定条码</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.panelTitle}>绑定条码</Text>
             <Pressable
               style={({ pressed }) => [styles.addBarcode, pressed && styles.pressed]}
               onPress={() => setScanTarget({ mode: 'add' })}
               accessibilityLabel="新增绑定条码"
+              hitSlop={space.sm}
             >
-              <MaterialCommunityIcons name="plus" size={20} color={colors.white} />
+              <MaterialCommunityIcons name="plus" size={16} color={colors.white} />
             </Pressable>
           </View>
 
-          {product.barcodes.length === 0 ? <Text style={styles.barcodeEmpty}>还没有条码</Text> : null}
+          {product.barcodes.length === 0 ? <Text maxFontSizeMultiplier={textScale.body} style={styles.barcodeEmpty}>还没有条码</Text> : null}
 
           {product.barcodes.map((code) => {
             // 防呆：商品必须至少保留一个条码，只剩一个时删除按钮变灰并给出说明。
@@ -279,8 +278,8 @@ export default function ProductScreen() {
                       }}
                       accessibilityLabel={`修改条码 ${code}`}
                     >
-                      <MaterialCommunityIcons name="pencil-outline" size={19} color={colors.navy} />
-                      <Text style={[styles.actionText, styles.actionTextEdit]}>修改</Text>
+                      <MaterialCommunityIcons name="pencil-outline" size={20} color={colors.navy} />
+                      <Text maxFontSizeMultiplier={textScale.body} style={[styles.actionText, styles.actionTextEdit]}>修改</Text>
                     </Pressable>
                     <Pressable
                       style={({ pressed }) => [
@@ -301,10 +300,10 @@ export default function ProductScreen() {
                     >
                       <MaterialCommunityIcons
                         name="trash-can-outline"
-                        size={19}
+                        size={20}
                         color={onlyOne ? colors.muted : colors.danger}
                       />
-                      <Text style={[styles.actionText, onlyOne ? styles.actionTextDisabled : styles.actionTextRemove]}>
+                      <Text maxFontSizeMultiplier={textScale.body} style={[styles.actionText, onlyOne ? styles.actionTextDisabled : styles.actionTextRemove]}>
                         删除
                       </Text>
                     </Pressable>
@@ -313,21 +312,21 @@ export default function ProductScreen() {
               >
                 <View style={styles.barcodeRow}>
                   {/* 禁止文本选中，否则安卓长按会弹出蓝色选择框，干扰左滑手势。 */}
-                  <Text selectable={false} style={styles.barcodeText}>
+                  <Text maxFontSizeMultiplier={textScale.body} selectable={false} style={styles.barcodeText}>
                     {code}
                   </Text>
                 </View>
               </Swipeable>
             );
           })}
-          <Text style={styles.barcodeHint}>左滑条码可修改或删除。</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.barcodeHint}>左滑条码可修改或删除。</Text>
         </View>
 
         <Pressable
           style={({ pressed }) => [styles.delete, pressed && styles.pressed]}
           onPress={() => setConfirmDelete(true)}
         >
-          <Text style={styles.deleteText}>删除商品</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.deleteText}>删除商品</Text>
         </Pressable>
 
         {scanTarget ? (
@@ -373,7 +372,7 @@ export default function ProductScreen() {
       </ScrollView>
 
       {/* 底部浮动提示：库存增减与条码相关的新增/修改/删除/防呆反馈全部走这里。 */}
-      {toast ? <ToastBar message={toast.message} tone={toast.tone} bottom={insets.bottom + 24} /> : null}
+      {toast ? <ToastBar message={toast.message} tone={toast.tone} bottom={insets.bottom + space.xl} /> : null}
     </View>
   );
 }
@@ -388,90 +387,100 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   content: {
-    padding: 16,
-    gap: 14,
-    paddingBottom: 32,
+    padding: space.lg,
+    gap: space.lg,
+    paddingBottom: space.xxl,
   },
   hero: {
     backgroundColor: colors.ink,
-    borderRadius: 24,
-    padding: 20,
+    borderRadius: radius.xl,
+    padding: space.xl,
   },
   heroHead: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
+    gap: space.md,
   },
   name: {
     flex: 1,
-    color: colors.white,
-    fontSize: 24,
-    fontWeight: '800',
+    color: colors.onInk,
+    ...type.display,
+    fontWeight: weight.bold,
   },
+  /**
+   * 置顶按钮：高度与商品名称首行一致，图标槽与文字槽各自定宽居中。
+   * 这样「置顶 / 已置顶」的字数变化不会带动图标和边框位置。
+   */
   pinButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingVertical: 2,
-    minWidth: 48,
+    justifyContent: 'center',
+    gap: space.xs,
+    minHeight: type.display.lineHeight,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.onInkLine,
   },
   pinIconWrap: {
-    width: 26,
-    height: 26,
+    width: space.lg,
+    height: space.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pinSlashGap: {
     position: 'absolute',
-    width: 5,
-    height: 26,
-    borderRadius: 3,
+    width: 4,
+    height: space.lg,
+    borderRadius: 2,
     backgroundColor: colors.ink,
     transform: [{ rotate: '45deg' }],
   },
   pinSlash: {
     position: 'absolute',
     width: 2,
-    height: 26,
+    height: space.lg,
     borderRadius: 1,
     backgroundColor: PIN_MUTED,
     transform: [{ rotate: '45deg' }],
   },
   pinLabel: {
-    fontSize: 11,
-    fontWeight: '800',
+    // 固定文字槽：容纳三个汉字（字号最多放大到 1.2×），两种状态共用同一个宽度。
+    width: 44,
+    textAlign: 'center',
+    ...type.caption,
+    fontWeight: weight.bold,
+  },
+  stockLabel: {
+    marginTop: space.xl,
+    color: colors.onInkMuted,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
   stock: {
     // 标签紧贴数字上方，只留一点点行间距离，让「当前库存 + 数字」读成一个整体。
-    marginTop: 2,
-    // 银灰填充 + 白色泛光描边，在深黑底上形成通透的微轮廓。
-    color: '#D6DBDF',
-    fontSize: 56,
-    fontWeight: '800',
-    textShadowColor: '#FFFFFF',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 3,
+    marginTop: space.xs,
+    color: colors.white,
+    ...type.numberHero,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
   },
   stockEmpty: {
-    color: '#F0A097',
-  },
-  stockLabel: {
-    marginTop: 12,
-    color: '#D9CBB8',
-    fontSize: 13,
+    color: colors.onInkDanger,
   },
   meta: {
-    marginTop: 10,
-    color: '#C8BEB0',
-    fontSize: 12,
+    marginTop: space.sm,
+    color: colors.onInkMuted,
+    ...type.caption,
+    fontWeight: weight.regular,
+    fontVariant: ['tabular-nums'],
   },
   panel: {
     backgroundColor: colors.card,
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.line,
-    gap: 10,
-    ...shadow,
+    borderRadius: radius.lg,
+    padding: space.lg,
+    gap: space.md,
+    ...elevation.card,
   },
   panelHead: {
     flexDirection: 'row',
@@ -480,152 +489,156 @@ const styles = StyleSheet.create({
   },
   panelTitle: {
     color: colors.ink,
-    fontSize: 15,
-    fontWeight: '800',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
+  /** 绑定条码的「新增」：与二级界面头部按钮共用紧凑行动样式（32 + 16 图标）。 */
   addBarcode: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: size.actionCompact,
+    height: size.actionCompact,
+    borderRadius: radius.sm,
     backgroundColor: colors.teal,
     alignItems: 'center',
     justifyContent: 'center',
   },
   quickRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: space.md,
   },
   minus: {
     flex: 1,
-    height: 52,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.claySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   minusText: {
-    color: colors.clay,
-    fontSize: 18,
-    fontWeight: '800',
+    color: colors.clayStrong,
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   plus: {
     flex: 1,
-    height: 52,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.greenSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   plusText: {
-    color: colors.green,
-    fontSize: 18,
-    fontWeight: '800',
+    color: colors.greenStrong,
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
-  /** 统一按下反馈：轻微下沉 + 透明淡出。 */
+  /** 统一按压反馈。 */
   pressed: {
-    opacity: 0.5,
-    transform: [{ scale: 0.96 }],
+    opacity: press.opacity,
+  },
+  /** 请求进行中的禁用态。 */
+  disabled: {
+    opacity: state.disabled,
   },
   barcodeRow: {
-    height: 46,
-    borderRadius: 12,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 12,
+    paddingHorizontal: space.md,
     justifyContent: 'center',
   },
   barcodeText: {
     color: colors.ink,
-    fontSize: 15,
+    ...type.body,
     fontVariant: ['tabular-nums'],
   },
   swipeActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingLeft: 8,
+    gap: space.sm,
+    paddingLeft: space.sm,
     backgroundColor: colors.card,
   },
   action: {
-    width: 68,
-    height: 46,
-    borderRadius: 12,
+    width: size.swipeAction,
+    minHeight: size.control,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: space.xs,
   },
   actionEdit: {
     backgroundColor: colors.navySoft,
-    borderWidth: 1,
-    borderColor: colors.navy,
   },
   actionRemove: {
     backgroundColor: colors.dangerSoft,
-    borderWidth: 1,
-    borderColor: colors.danger,
   },
   actionDisabled: {
     backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.line,
   },
   actionText: {
-    fontSize: 12,
-    fontWeight: '800',
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   actionTextEdit: {
-    color: colors.navy,
+    color: colors.navyStrong,
   },
   actionTextRemove: {
-    color: colors.danger,
+    color: colors.dangerStrong,
   },
   actionTextDisabled: {
     color: colors.muted,
   },
   barcodeEmpty: {
     color: colors.muted,
+    ...type.body,
   },
   barcodeHint: {
     color: colors.muted,
-    fontSize: 12,
+    ...type.caption,
   },
+  /** 「删除商品」独立成块，与卡片同级，补一档卡片阴影保持统一。 */
   delete: {
-    height: 50,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.danger,
     backgroundColor: colors.dangerSoft,
+    ...elevation.card,
   },
   deleteText: {
-    color: colors.danger,
-    fontSize: 16,
-    fontWeight: '800',
+    color: colors.dangerStrong,
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   missing: {
     flex: 1,
     backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
-    padding: 24,
+    gap: space.lg,
+    padding: space.xl,
   },
   missingTitle: {
     color: colors.ink,
-    fontSize: 18,
-    fontWeight: '800',
+    ...type.title,
+    fontWeight: weight.bold,
   },
   primary: {
-    height: 48,
-    paddingHorizontal: 18,
-    borderRadius: 14,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.md,
     backgroundColor: colors.teal,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryText: {
     color: colors.white,
-    fontWeight: '800',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
 });

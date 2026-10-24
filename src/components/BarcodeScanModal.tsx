@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarcodeReplaceSheet } from '@/components/BarcodeReplaceSheet';
 import { BARCODE_TYPES } from '@/lib/barcode';
-import { colors } from '@/theme';
+import { colors, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 /** 清空输入后短时间内忽略刚被清掉的条码，留出把镜头移向新条码的时间。 */
 const CLEAR_GRACE_MS = 1500;
@@ -117,40 +117,45 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
           </>
         ) : (
           <View style={styles.permission}>
-            <Text style={styles.permissionTitle}>需要相机权限</Text>
-            <Text style={styles.permissionText}>允许使用相机后即可扫码，也可以在下方直接手动录入条码。</Text>
+            <Text style={styles.permissionTitle} maxFontSizeMultiplier={textScale.title}>
+              需要相机权限
+            </Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.permissionText}>允许使用相机后即可扫码，也可以在下方直接手动录入条码。</Text>
             <Pressable style={styles.permissionButton} onPress={() => void requestPermission()}>
-              <Text style={styles.permissionButtonText}>允许使用相机</Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.permissionButtonText}>允许使用相机</Text>
             </Pressable>
           </View>
         )}
 
-        <View style={[styles.top, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.top, { paddingTop: insets.top + space.sm }]}>
           <Pressable style={styles.iconButton} onPress={onCancel}>
-            <Text style={styles.iconText}>关闭</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.iconText}>关闭</Text>
           </Pressable>
           <View style={styles.titleWrap}>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.hint}>{statusHint}</Text>
+            <Text style={styles.title} maxFontSizeMultiplier={textScale.title}>
+              {title}
+            </Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>{statusHint}</Text>
           </View>
           <Pressable
             style={styles.iconButton}
             onPress={() => setTorch((current) => !current)}
             accessibilityLabel={torch ? '关闭补光' : '开启补光'}
           >
-            <Text style={styles.iconText}>{torch ? '关灯' : '补光'}</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.iconText}>{torch ? '关灯' : '补光'}</Text>
           </Pressable>
         </View>
 
         {granted ? <View style={styles.filler} /> : null}
 
-        <View style={[styles.bottom, { paddingBottom: insets.bottom + 20 }]}>
+        <View style={[styles.bottom, { paddingBottom: insets.bottom + space.xl }]}>
           <TextInput
             value={value}
             onChangeText={setValue}
             placeholder="手动输入条形码"
             placeholderTextColor={colors.muted}
             style={styles.input}
+            maxFontSizeMultiplier={textScale.body}
             autoCapitalize="none"
             autoCorrect={false}
             selectTextOnFocus
@@ -162,7 +167,7 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
               disabled={!value}
               accessibilityState={{ disabled: !value }}
             >
-              <Text style={styles.clearText}>清空输入</Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.clearText}>清空输入</Text>
             </Pressable>
             <Pressable
               style={[styles.submit, !trimmed && styles.submitDisabled]}
@@ -170,7 +175,7 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
               disabled={!trimmed}
               accessibilityState={{ disabled: !trimmed }}
             >
-              <Text style={styles.submitText}>确认</Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.submitText}>确认</Text>
             </Pressable>
           </View>
         </View>
@@ -196,50 +201,52 @@ const styles = StyleSheet.create({
   permission: {
     flex: 1,
     justifyContent: 'center',
-    gap: 14,
-    paddingHorizontal: 24,
+    gap: space.lg,
+    paddingHorizontal: space.xl,
   },
   permissionTitle: {
     color: colors.white,
-    fontSize: 22,
-    fontWeight: '800',
+    ...type.heading,
+    fontWeight: weight.bold,
   },
   permissionText: {
-    color: '#D9CBB8',
-    fontSize: 15,
-    lineHeight: 22,
+    color: colors.onInkMuted,
+    ...type.body,
+    fontWeight: weight.regular,
   },
   permissionButton: {
-    height: 50,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
     backgroundColor: colors.teal,
     alignItems: 'center',
     justifyContent: 'center',
   },
   permissionButtonText: {
     color: colors.white,
-    fontSize: 16,
-    fontWeight: '800',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   top: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    paddingHorizontal: 16,
+    gap: space.sm,
+    paddingHorizontal: space.lg,
   },
   iconButton: {
-    minWidth: 52,
-    height: 36,
-    borderRadius: 18,
-    paddingHorizontal: 10,
-    backgroundColor: 'rgba(16,17,15,0.62)',
+    minWidth: size.touch,
+    height: size.touch,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    backgroundColor: colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconText: {
     color: colors.white,
-    fontSize: 13,
-    fontWeight: '700',
+    ...type.body,
+    fontWeight: weight.bold,
   },
   titleWrap: {
     flex: 1,
@@ -247,14 +254,14 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.white,
-    fontSize: 18,
-    fontWeight: '800',
+    ...type.title,
+    fontWeight: weight.bold,
   },
   hint: {
-    marginTop: 4,
-    color: '#E7E0D4',
-    fontSize: 12,
-    lineHeight: 17,
+    marginTop: space.xs,
+    color: colors.onInkMuted,
+    ...type.caption,
+    fontWeight: weight.regular,
     textAlign: 'center',
   },
   filler: {
@@ -266,59 +273,62 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   frameBox: {
-    width: 260,
-    height: 160,
-    borderRadius: 18,
+    width: size.scanFrameWidth,
+    height: size.scanFrameHeight,
+    borderRadius: radius.lg,
     borderWidth: 2,
-    borderColor: 'rgba(255,252,247,0.92)',
+    borderColor: colors.card,
   },
   bottom: {
-    gap: 12,
-    paddingHorizontal: 16,
+    gap: space.md,
+    paddingHorizontal: space.lg,
   },
   input: {
-    height: 48,
-    borderRadius: 14,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.card,
-    paddingHorizontal: 14,
+    paddingHorizontal: space.md,
     color: colors.ink,
-    fontSize: 15,
+    ...type.body,
     fontVariant: ['tabular-nums'],
   },
   actions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: space.md,
   },
   clear: {
     flex: 1,
-    height: 50,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,252,247,0.16)',
+    backgroundColor: colors.overlay,
   },
   clearDisabled: {
-    opacity: 0.45,
+    opacity: state.disabled,
   },
   clearText: {
     color: colors.white,
-    fontSize: 16,
-    fontWeight: '700',
+    ...type.bodyLg,
+    fontWeight: weight.regular,
   },
   submit: {
     flex: 1.4,
-    height: 50,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.teal,
   },
   submitDisabled: {
-    opacity: 0.45,
+    opacity: state.disabled,
   },
   submitText: {
     color: colors.white,
-    fontSize: 16,
-    fontWeight: '800',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
 });

@@ -1,7 +1,17 @@
-import { Tabs } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
+import { StyleSheet, Text, type ColorValue } from 'react-native';
 
-import { colors } from '@/theme';
+import { colors, size, space, textScale, type, weight } from '@/theme';
+
+/** Tab 栏高度固定，标签字号缩放需要封顶，否则大字号会把标签挤出栏位。 */
+function TabLabel({ color, label }: { color: ColorValue; label: string }) {
+  return (
+    <Text style={[styles.tabLabel, { color }]} maxFontSizeMultiplier={textScale.title} numberOfLines={1}>
+      {label}
+    </Text>
+  );
+}
 
 export default function TabLayout() {
   return (
@@ -10,17 +20,16 @@ export default function TabLayout() {
         headerStyle: { backgroundColor: colors.bg },
         headerShadowVisible: false,
         headerTintColor: colors.ink,
-        headerTitleStyle: { fontWeight: '700', color: colors.ink },
+        headerTitleStyle: { fontWeight: weight.bold, color: colors.ink },
         tabBarActiveTintColor: colors.teal,
         tabBarInactiveTintColor: colors.muted,
         tabBarStyle: {
           backgroundColor: colors.card,
           borderTopColor: colors.line,
-          height: 64,
-          paddingTop: 6,
-          paddingBottom: 8,
+          height: size.tabBarHeight,
+          paddingTop: space.sm,
+          paddingBottom: space.sm,
         },
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '700' },
         sceneStyle: { backgroundColor: colors.bg },
       }}
     >
@@ -29,8 +38,10 @@ export default function TabLayout() {
         options={{
           title: '库存管理',
           headerShown: false,
-          tabBarLabel: '库存管理',
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="warehouse" color={color} size={size} />,
+          tabBarLabel: ({ color }) => <TabLabel color={color} label="库存管理" />,
+          tabBarIcon: ({ color, size: iconSize }) => (
+            <MaterialCommunityIcons name="warehouse" color={color} size={iconSize} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -38,8 +49,9 @@ export default function TabLayout() {
         options={{
           title: '日志',
           headerShown: false,
-          tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="clipboard-text-clock-outline" color={color} size={size} />
+          tabBarLabel: ({ color }) => <TabLabel color={color} label="日志" />,
+          tabBarIcon: ({ color, size: iconSize }) => (
+            <MaterialCommunityIcons name="clipboard-text-clock-outline" color={color} size={iconSize} />
           ),
         }}
       />
@@ -48,9 +60,19 @@ export default function TabLayout() {
         options={{
           title: '设置',
           headerShown: false,
-          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="cog-outline" color={color} size={size} />,
+          tabBarLabel: ({ color }) => <TabLabel color={color} label="设置" />,
+          tabBarIcon: ({ color, size: iconSize }) => (
+            <MaterialCommunityIcons name="cog-outline" color={color} size={iconSize} />
+          ),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabLabel: {
+    ...type.caption,
+    fontWeight: weight.bold,
+  },
+});

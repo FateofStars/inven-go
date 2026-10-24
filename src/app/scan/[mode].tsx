@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddProductModal, type ProductSelection } from '@/components/AddProductModal';
@@ -10,7 +10,7 @@ import { ToastBar, type ToastTone } from '@/components/ToastBar';
 import { useInventory } from '@/context/InventoryContext';
 import { BARCODE_TYPES } from '@/lib/barcode';
 import type { Product } from '@/lib/types';
-import { colors } from '@/theme';
+import { colors, radius, size, space, textScale, type, weight } from '@/theme';
 
 /** 全局死锁时长：命中有效商品后 3 秒内忽略全部扫码事件。 */
 const SCAN_LOCK_MS = 3000;
@@ -351,14 +351,16 @@ export default function ScanScreen() {
 
   if (!permission.granted) {
     return (
-      <View style={[styles.permission, { paddingTop: insets.top + 24 }]}>
-        <Text style={styles.permissionTitle}>需要相机权限</Text>
-        <Text style={styles.permissionText}>扫描条形码前，请允许库存管理使用相机。</Text>
+      <View style={[styles.permission, { paddingTop: insets.top + space.xl }]}>
+        <Text style={styles.permissionTitle} maxFontSizeMultiplier={textScale.title}>
+          需要相机权限
+        </Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.permissionText}>扫描条形码前，请允许库存管理使用相机。</Text>
         <Pressable style={styles.permissionButton} onPress={() => void requestPermission()}>
-          <Text style={styles.permissionButtonText}>允许使用相机</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.permissionButtonText}>允许使用相机</Text>
         </Pressable>
         <Pressable onPress={() => router.back()}>
-          <Text style={styles.backLink}>返回</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.backLink}>返回</Text>
         </Pressable>
       </View>
     );
@@ -378,18 +380,20 @@ export default function ScanScreen() {
         onBarcodeScanned={scannerEnabled ? onBarcodeScanned : undefined}
       />
       <View style={styles.overlay} pointerEvents="box-none">
-        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.topBar, { paddingTop: insets.top + space.sm }]}>
           <Pressable style={styles.iconButton} onPress={() => router.back()}>
-            <Text style={styles.iconText}>关闭</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.iconText}>关闭</Text>
           </Pressable>
           <View style={styles.titleWrap}>
-            <Text style={styles.title}>{titles[mode]}</Text>
-            <Text style={styles.hint}>
+            <Text style={styles.title} maxFontSizeMultiplier={textScale.title}>
+              {titles[mode]}
+            </Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>
               {rescanning ? '对准新条码，扫描后自动返回表单' : cooling ? COOLING_HINT : hints[mode]}
             </Text>
           </View>
           <Pressable style={styles.iconButton} onPress={() => setTorch((value) => !value)}>
-            <Text style={styles.iconText}>{torch ? '关灯' : '补光'}</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.iconText}>{torch ? '关灯' : '补光'}</Text>
           </Pressable>
         </View>
 
@@ -398,8 +402,8 @@ export default function ScanScreen() {
         </View>
 
         {rescanning ? (
-          <Pressable style={[styles.resume, { bottom: insets.bottom + 28 }]} onPress={() => setRescanning(false)}>
-            <Text style={styles.resumeText}>返回添加商品</Text>
+          <Pressable style={[styles.resume, { bottom: insets.bottom + space.xl }]} onPress={() => setRescanning(false)}>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.resumeText}>返回添加商品</Text>
           </Pressable>
         ) : null}
 
@@ -408,7 +412,7 @@ export default function ScanScreen() {
             message={toast.message}
             tone={toast.tone}
             actionHint={toast.actionHint}
-            bottom={insets.bottom + 24}
+            bottom={insets.bottom + space.xl}
             onPress={resolveToastAction(toast)}
           />
         ) : null}
@@ -417,20 +421,27 @@ export default function ScanScreen() {
       {liveProduct && queryHit ? (
         <View style={styles.cardBackdrop}>
           <View style={styles.queryCard}>
-            <Text style={styles.queryKicker}>查询结果</Text>
-            <Text style={styles.queryName}>{liveProduct.name}</Text>
-            <Text style={styles.queryStock}>{liveProduct.stock}</Text>
-            <Text style={styles.queryStockLabel}>当前剩余库存</Text>
-            <Text style={styles.queryBarcodeTitle}>绑定条码</Text>
-            {liveProduct.barcodes.map((code) => {
-              const matched = code === queryHit.barcode;
-              return (
-                <Text key={code} style={[styles.queryBarcode, matched && styles.queryBarcodeHit]}>
-                  {matched ? '本次扫描 · ' : ''}
-                  {code}
-                </Text>
-              );
-            })}
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.queryKicker}>查询结果</Text>
+            <Text style={styles.queryName} maxFontSizeMultiplier={textScale.title} numberOfLines={2}>
+              {liveProduct.name}
+            </Text>
+            <Text style={styles.queryStock} maxFontSizeMultiplier={textScale.number}>
+              {liveProduct.stock}
+            </Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.queryStockLabel}>当前剩余库存</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.queryBarcodeTitle}>绑定条码</Text>
+            {/* 条码多时只压缩这一块，产品名、库存与底部按钮始终可见。 */}
+            <ScrollView style={styles.queryBarcodeList} showsVerticalScrollIndicator={false}>
+              {liveProduct.barcodes.map((code) => {
+                const matched = code === queryHit.barcode;
+                return (
+                  <Text maxFontSizeMultiplier={textScale.body} key={code} style={[styles.queryBarcode, matched && styles.queryBarcodeHit]}>
+                    {matched ? '本次扫描 · ' : ''}
+                    {code}
+                  </Text>
+                );
+              })}
+            </ScrollView>
             <Pressable
               style={styles.queryClose}
               onPress={() => {
@@ -439,7 +450,7 @@ export default function ScanScreen() {
                 setQueryHit(null);
               }}
             >
-              <Text style={styles.queryCloseText}>关闭并继续扫描</Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.queryCloseText}>关闭并继续扫描</Text>
             </Pressable>
           </View>
         </View>
@@ -503,22 +514,22 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
-    paddingHorizontal: 16,
+    gap: space.sm,
+    paddingHorizontal: space.lg,
   },
   iconButton: {
-    minWidth: 52,
-    height: 36,
-    borderRadius: 18,
-    paddingHorizontal: 10,
-    backgroundColor: 'rgba(16,17,15,0.62)',
+    minWidth: size.touch,
+    height: size.touch,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    backgroundColor: colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconText: {
     color: colors.white,
-    fontSize: 13,
-    fontWeight: '700',
+    ...type.body,
+    fontWeight: weight.bold,
   },
   titleWrap: {
     flex: 1,
@@ -526,15 +537,15 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.white,
-    fontSize: 18,
-    fontWeight: '800',
+    ...type.title,
+    fontWeight: weight.bold,
   },
   hint: {
-    marginTop: 4,
-    color: '#E7E0D4',
-    fontSize: 12,
+    marginTop: space.xs,
+    color: colors.onInkMuted,
+    ...type.caption,
+    fontWeight: weight.regular,
     textAlign: 'center',
-    lineHeight: 17,
   },
   frame: {
     flex: 1,
@@ -542,124 +553,141 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   frameBox: {
-    width: 260,
-    height: 160,
-    borderRadius: 18,
+    width: size.scanFrameWidth,
+    height: size.scanFrameHeight,
+    borderRadius: radius.lg,
     borderWidth: 2,
-    borderColor: 'rgba(255,252,247,0.92)',
+    borderColor: colors.card,
     backgroundColor: 'transparent',
   },
   resume: {
     position: 'absolute',
     alignSelf: 'center',
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    backgroundColor: colors.card,
+    borderRadius: radius.md,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.md,
   },
   resumeText: {
     color: colors.ink,
-    fontWeight: '800',
+    ...type.body,
+    fontWeight: weight.bold,
   },
   cardBackdrop: {
     ...StyleSheet.absoluteFill,
     backgroundColor: colors.scrim,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: space.xl,
   },
   queryCard: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: size.modalMaxWidth,
+    // 高度封顶在遮罩的内容区内，多出来的部分交给下面的条码列表滚动。
+    maxHeight: '100%',
     backgroundColor: colors.card,
-    borderRadius: 24,
-    padding: 22,
+    borderRadius: radius.xl,
+    padding: space.xl,
   },
   queryKicker: {
-    color: colors.navy,
-    fontSize: 13,
-    fontWeight: '800',
+    color: colors.navyStrong,
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   queryName: {
-    marginTop: 8,
+    marginTop: space.sm,
     color: colors.ink,
-    fontSize: 24,
-    fontWeight: '800',
+    ...type.display,
+    fontWeight: weight.bold,
   },
   queryStock: {
-    marginTop: 12,
+    marginTop: space.md,
     color: colors.teal,
-    fontSize: 48,
-    fontWeight: '800',
+    ...type.numberLg,
+    fontWeight: weight.bold,
+    fontVariant: ['tabular-nums'],
   },
   queryStockLabel: {
     color: colors.muted,
-    fontSize: 13,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
   queryBarcodeTitle: {
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: space.lg,
+    marginBottom: space.sm,
     color: colors.ink,
-    fontSize: 14,
-    fontWeight: '800',
+    ...type.body,
+    fontWeight: weight.bold,
+  },
+  /** 唯一可压缩的区域：条码再多也不会把上方信息或底部按钮挤出屏幕。 */
+  queryBarcodeList: {
+    flexGrow: 0,
+    flexShrink: 1,
   },
   queryBarcode: {
     color: colors.ink,
     backgroundColor: colors.bg,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
-    fontSize: 14,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+    marginBottom: space.sm,
+    ...type.body,
+    fontVariant: ['tabular-nums'],
   },
   queryBarcodeHit: {
-    backgroundColor: '#F8E7A8',
+    backgroundColor: colors.highlight,
     color: colors.ink,
-    fontWeight: '800',
+    fontWeight: weight.bold,
   },
   queryClose: {
-    marginTop: 8,
-    height: 48,
-    borderRadius: 14,
+    marginTop: space.sm,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
     backgroundColor: colors.navy,
     alignItems: 'center',
     justifyContent: 'center',
   },
   queryCloseText: {
     color: colors.white,
-    fontWeight: '800',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   permission: {
     flex: 1,
     backgroundColor: colors.bg,
-    paddingHorizontal: 24,
-    gap: 14,
+    paddingHorizontal: space.xl,
+    gap: space.lg,
   },
   permissionTitle: {
     color: colors.ink,
-    fontSize: 24,
-    fontWeight: '800',
+    ...type.display,
+    fontWeight: weight.bold,
   },
   permissionText: {
     color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
+    ...type.body,
+    fontWeight: weight.regular,
   },
   permissionButton: {
-    height: 50,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
     backgroundColor: colors.teal,
     alignItems: 'center',
     justifyContent: 'center',
   },
   permissionButtonText: {
     color: colors.white,
-    fontWeight: '800',
-    fontSize: 16,
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   backLink: {
-    color: colors.navy,
-    fontWeight: '700',
+    color: colors.tealStrong,
+    ...type.body,
+    fontWeight: weight.bold,
     textAlign: 'center',
   },
 });

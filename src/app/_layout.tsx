@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { InventoryProvider, useInventory } from '@/context/InventoryContext';
-import { colors } from '@/theme';
+import { colors, weight } from '@/theme';
 
 function RootNavigator() {
   const { ready } = useInventory();
@@ -23,7 +23,7 @@ function RootNavigator() {
         headerStyle: { backgroundColor: colors.bg },
         headerShadowVisible: false,
         headerTintColor: colors.ink,
-        headerTitleStyle: { fontWeight: '700', color: colors.ink },
+        headerTitleStyle: { fontWeight: weight.bold, color: colors.ink },
         contentStyle: { backgroundColor: colors.bg },
       }}
     >

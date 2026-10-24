@@ -19,27 +19,30 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
 import { useInventory } from '@/context/InventoryContext';
-import { barcodeSummary } from '@/lib/format';
 import type { Product } from '@/lib/types';
-import { colors, shadow } from '@/theme';
+import { colors, elevation, press, radius, size, space, textScale, type, weight } from '@/theme';
 
+/**
+ * 首页三个扫描入口各自保留一种识别色，颜色只出现在图标底块与标签上。
+ * `text` 是浅底专用的深档字色，保证 12px 标签仍有 4.5:1 对比度。
+ */
 const actions = [
-  { mode: 'inbound', label: '入库扫描', icon: 'tray-arrow-down', color: colors.teal, soft: colors.tealSoft },
-  { mode: 'outbound', label: '出库扫描', icon: 'tray-arrow-up', color: colors.clay, soft: colors.claySoft },
-  { mode: 'query', label: '库存查询', icon: 'barcode-scan', color: colors.navy, soft: colors.navySoft },
+  { mode: 'inbound', label: '入库扫描', icon: 'tray-arrow-down', color: colors.teal, text: colors.tealStrong, soft: colors.tealSoft },
+  { mode: 'outbound', label: '出库扫描', icon: 'tray-arrow-up', color: colors.clay, text: colors.clayStrong, soft: colors.claySoft },
+  { mode: 'query', label: '库存查询', icon: 'barcode-scan', color: colors.navy, text: colors.navyStrong, soft: colors.navySoft },
 ] as const;
 
 /** 底部浮动操作条的预估高度（首帧用），真实高度由 onLayout 量出来。 */
 const ACTION_BAR_HEIGHT = 78;
 /** 悬浮操作条 / Toast 与相邻元素之间的统一留白，三者的等距呼吸感依赖它。 */
-const ACTION_BAR_GAP = 16;
+const ACTION_BAR_GAP = space.lg;
 
 /** 长按进入拖拽排序所需的按压时长。 */
 const LONG_PRESS_MS = 500;
 /** 卡片间距：与 styles.row 的 gap / marginBottom 保持一致，拖拽几何计算依赖它。 */
-const CARD_GAP = 12;
+const CARD_GAP = space.md;
 /** 列表左右内边距：与 styles.list 的 paddingHorizontal 保持一致。 */
-const LIST_PADDING = 16;
+const LIST_PADDING = space.lg;
 /** 卡片高度量不出来时的兜底值，只为让几何计算不至于失效。 */
 const FALLBACK_CARD_HEIGHT = 160;
 
@@ -93,7 +96,7 @@ export default function InventoryScreen() {
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
   const [actionBarHeight, setActionBarHeight] = useState(ACTION_BAR_HEIGHT);
   // 取整避免两列宽度之和与容器差出亚像素，导致 flexWrap 意外换行。
-  const cardWidth = Math.floor((width - 32 - 12) / 2);
+  const cardWidth = Math.floor((width - LIST_PADDING * 2 - CARD_GAP) / 2);
 
   const rootRef = useRef<View>(null);
   const listRef = useRef<FlatList<Product>>(null);
@@ -368,7 +371,7 @@ export default function InventoryScreen() {
       onResponderTerminate={handleResponderEnd}
       onResponderTerminationRequest={() => false}
     >
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         {searchOpen ? (
           <>
             <View style={styles.searchBox}>
@@ -379,19 +382,24 @@ export default function InventoryScreen() {
                 placeholder="输入商品名称搜索"
                 placeholderTextColor={colors.muted}
                 style={styles.searchInput}
+                maxFontSizeMultiplier={textScale.body}
                 autoFocus
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="search"
               />
               {query.length > 0 ? (
-                <Pressable hitSlop={10} onPress={() => setQuery('')} accessibilityLabel="清空搜索">
+                <Pressable
+                  style={styles.searchClear}
+                  onPress={() => setQuery('')}
+                  accessibilityLabel="清空搜索"
+                >
                   <MaterialCommunityIcons name="close-circle" size={18} color={colors.muted} />
                 </Pressable>
               ) : null}
             </View>
-            <Pressable style={styles.cancel} onPress={closeSearch} hitSlop={8}>
-              <Text style={styles.cancelText}>取消</Text>
+            <Pressable style={styles.cancel} onPress={closeSearch} hitSlop={space.md}>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.cancelText}>取消</Text>
             </Pressable>
           </>
         ) : (
@@ -403,8 +411,10 @@ export default function InventoryScreen() {
                 onPress={scrollToTop}
                 accessibilityLabel="回到顶部"
               >
-                <Text style={styles.title}>Inven Go</Text>
-                <Text style={styles.subtitle}>
+                <Text style={styles.title} maxFontSizeMultiplier={textScale.title}>
+                  Inven Go
+                </Text>
+                <Text maxFontSizeMultiplier={textScale.body} style={styles.subtitle}>
                   {products.length} 种商品 · 共 {totalStock} 件
                 </Text>
               </Pressable>
@@ -437,17 +447,21 @@ export default function InventoryScreen() {
           ListEmptyComponent={
             pinnedCount > 0 ? null : products.length === 0 ? (
               <View style={styles.empty}>
-                <MaterialCommunityIcons name="package-variant" size={42} color={colors.muted} />
-                <Text style={styles.emptyTitle}>仓库还是空的</Text>
-                <Text style={styles.emptyText}>点击下方「入库扫描」，扫到新条码后即可创建商品。</Text>
+                <MaterialCommunityIcons name="package-variant" size={size.emptyIcon} color={colors.muted} />
+                <Text style={styles.emptyTitle} maxFontSizeMultiplier={textScale.title}>
+                  仓库还是空的
+                </Text>
+                <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyText}>点击下方「入库扫描」，扫到新条码后即可创建商品。</Text>
               </View>
             ) : (
               <View style={styles.empty}>
-                <MaterialCommunityIcons name="magnify-close" size={42} color={colors.muted} />
-                <Text style={styles.emptyTitle}>没有匹配的商品</Text>
-                <Text style={styles.emptyText}>没有名称包含「{query.trim()}」的商品，换个关键词试试。</Text>
+                <MaterialCommunityIcons name="magnify-close" size={size.emptyIcon} color={colors.muted} />
+                <Text style={styles.emptyTitle} maxFontSizeMultiplier={textScale.title}>
+                  没有匹配的商品
+                </Text>
+                <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyText}>没有名称包含「{query.trim()}」的商品，换个关键词试试。</Text>
                 <Pressable style={styles.emptyAction} onPress={() => setQuery('')}>
-                  <Text style={styles.emptyActionText}>清空搜索</Text>
+                  <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyActionText}>清空搜索</Text>
                 </Pressable>
               </View>
             )
@@ -484,7 +498,7 @@ export default function InventoryScreen() {
                 <View style={[styles.actionIcon, { backgroundColor: action.soft }]}>
                   <MaterialCommunityIcons name={action.icon} size={22} color={action.color} />
                 </View>
-                <Text style={[styles.actionLabel, { color: action.color }]}>{action.label}</Text>
+                <Text maxFontSizeMultiplier={textScale.body} style={[styles.actionLabel, { color: action.text }]}>{action.label}</Text>
               </Pressable>
             </Fragment>
           ))}
@@ -565,28 +579,54 @@ function PinnedCard({ product, width, dragging, onPress, onPressIn, onLongPress,
 }
 
 function CardBody({ product, pinned }: { product: Product; pinned: boolean }) {
-  // 0 件标红表示缺货，1 件标黄提醒库存紧张，其余为正常色。
-  const stockStyle =
-    product.stock === 0 ? styles.stockEmpty : product.stock === 1 ? styles.stockLow : undefined;
+  // 库存状态同时用文字和颜色表达：颜色只做辅助，色觉障碍用户也能读懂。
+  const outOfStock = product.stock === 0;
+  const lowStock = product.stock === 1;
+  const stockStyle = outOfStock ? styles.stockEmpty : lowStock ? styles.stockLow : undefined;
+  // 条码一栏拆成「首个条码 + 固定后缀」两段：长条码只压缩前半段，后缀始终完整可读。
+  const barcodeCount = product.barcodes.length;
+  const barcodeHead = barcodeCount === 0 ? '未绑定条码' : product.barcodes[0];
 
   return (
     <>
       {/* 名称与置顶徽标同一行、垂直居中；行内左右留白由卡片 padding 统一保证对称。 */}
       <View style={styles.cardHead}>
-        <Text style={styles.name} numberOfLines={2}>
+        <Text style={styles.name} numberOfLines={2} maxFontSizeMultiplier={textScale.title}>
           {product.name}
         </Text>
         {pinned ? (
           <View style={styles.pinBadge}>
-            <MaterialCommunityIcons name="pin" size={12} color={colors.teal} />
+            <MaterialCommunityIcons name="pin" size={12} color={colors.tealStrong} />
           </View>
         ) : null}
       </View>
-      <Text style={[styles.stock, stockStyle]}>{product.stock}</Text>
-      <Text style={styles.stockLabel}>当前库存</Text>
-      <Text style={styles.barcode} numberOfLines={1}>
-        {barcodeSummary(product.barcodes)}
-      </Text>
+      {/* 数量与单位成组左对齐；异常库存时在同行右侧补一枚状态胶囊，与数字上下居中。 */}
+      <View style={styles.stockRow}>
+        <View style={styles.stockValue}>
+          <Text style={[styles.stock, stockStyle]} maxFontSizeMultiplier={textScale.number}>
+            {product.stock}
+          </Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.stockUnit}>件</Text>
+        </View>
+        {outOfStock || lowStock ? (
+          <View style={[styles.statusPill, outOfStock ? styles.statusPillDanger : styles.statusPillWarning]}>
+            <Text
+              maxFontSizeMultiplier={textScale.body}
+              style={[styles.statusPillText, outOfStock ? styles.statusTextDanger : styles.statusTextWarning]}
+            >
+              {outOfStock ? '缺货' : '库存偏低'}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.barcodeRow}>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.barcode} numberOfLines={1} ellipsizeMode="middle">
+          {barcodeHead}
+        </Text>
+        {barcodeCount > 1 ? (
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.barcodeMore}>{`等${barcodeCount}个条码`}</Text>
+        ) : null}
+      </View>
     </>
   );
 }
@@ -599,9 +639,9 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.md,
   },
   titleWrap: {
     flex: 1,
@@ -611,52 +651,57 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   title: {
+    ...type.display,
     color: colors.ink,
-    fontSize: 24,
-    fontWeight: '800',
+    fontWeight: weight.bold,
   },
   subtitle: {
-    marginTop: 3,
+    marginTop: space.xs,
+    ...type.caption,
     color: colors.muted,
-    fontSize: 13,
-    fontWeight: '600',
+    fontWeight: weight.regular,
   },
   searchButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 15,
+    width: size.touch,
+    height: size.touch,
+    borderRadius: radius.md,
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadow,
+    ...elevation.card,
   },
   searchBox: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    height: 44,
-    borderRadius: 15,
+    gap: space.sm,
+    height: size.touch,
+    borderRadius: radius.md,
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 12,
+    paddingHorizontal: space.md,
+    ...elevation.card,
   },
   searchInput: {
     flex: 1,
     padding: 0,
     color: colors.ink,
-    fontSize: 15,
+    ...type.body,
+  },
+  /** 清空键做成 44×44 热区，视觉上仍贴着输入框右侧内边距。 */
+  searchClear: {
+    width: size.touch,
+    height: size.touch,
+    marginRight: -space.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cancel: {
-    paddingHorizontal: 2,
+    paddingHorizontal: space.xs,
   },
   cancelText: {
-    color: colors.navy,
-    fontSize: 15,
-    fontWeight: '700',
+    color: colors.tealStrong,
+    ...type.body,
+    fontWeight: weight.bold,
   },
   listWrap: {
     flex: 1,
@@ -673,21 +718,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: CARD_GAP,
-    marginBottom: CARD_GAP,
+    marginBottom: space.lg,
   },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...shadow,
+    borderRadius: radius.lg,
+    padding: space.lg,
+    ...elevation.card,
   },
   cardDragging: {
-    shadowOpacity: 0.24,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 16,
+    ...elevation.drag,
   },
   placeholderSlot: {
     position: 'absolute',
@@ -695,10 +735,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderRadius: 18,
+    borderRadius: radius.lg,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: '#C9C0B2',
+    borderColor: colors.placeholderLine,
     backgroundColor: colors.bg,
   },
   placeholderContent: {
@@ -712,33 +752,45 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   pinBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 8,
-    marginLeft: 8,
-    // 标题行高 24、徽标高 22：(24 - 22) / 2 = 1，徽标中心正好落在首行文字的中心线上。
-    marginTop: 1,
+    width: size.badge,
+    height: size.badge,
+    borderRadius: radius.sm,
+    marginLeft: space.sm,
+    // 标题首行行高 26、徽标高 20：上移 4 后徽标中心与首行文字中心基本重合。
+    marginTop: space.xs,
     backgroundColor: colors.tealSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pressed: {
-    opacity: 0.75,
+    opacity: press.opacity,
   },
   name: {
     flex: 1,
     color: colors.ink,
-    fontSize: 18,
-    fontWeight: '700',
-    // 两行高度预留在标题自身：标题仍贴顶部，同时保证卡片总高度与拖拽几何一致。
-    minHeight: 48,
-    lineHeight: 24,
+    ...type.title,
+    fontWeight: weight.bold,
+    // 两行标题高度预留在标题自身：标题仍贴顶部，同时保证卡片总高度与拖拽几何一致。
+    minHeight: type.title.lineHeight * 2,
+  },
+  stockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginTop: space.sm,
+  },
+  /** 数字与单位按基线对齐，单位贴着数字右侧。 */
+  stockValue: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: space.xs,
   },
   stock: {
-    marginTop: 8,
+    ...type.number,
     color: colors.teal,
-    fontSize: 32,
-    fontWeight: '800',
+    fontWeight: weight.bold,
+    // 等宽数字：两列并排时个位与十位始终对齐。
+    fontVariant: ['tabular-nums'],
   },
   stockEmpty: {
     color: colors.danger,
@@ -746,97 +798,131 @@ const styles = StyleSheet.create({
   stockLow: {
     color: colors.warning,
   },
-  stockLabel: {
+  stockUnit: {
+    ...type.caption,
     color: colors.muted,
-    fontSize: 12,
+    fontWeight: weight.regular,
+  },
+  statusPill: {
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    borderRadius: radius.pill,
+  },
+  statusPillDanger: {
+    backgroundColor: colors.dangerSoft,
+  },
+  statusPillWarning: {
+    backgroundColor: colors.warningSoft,
+  },
+  statusPillText: {
+    ...type.caption,
+    fontWeight: weight.bold,
+  },
+  statusTextDanger: {
+    color: colors.dangerStrong,
+  },
+  statusTextWarning: {
+    color: colors.warningStrong,
+  },
+  /** 条码行：首码可收缩并中段省略，「等 N 个条码」保持原宽不被压缩。 */
+  barcodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    marginTop: space.sm,
   },
   barcode: {
-    marginTop: 10,
-    color: colors.navy,
-    fontSize: 12,
-    fontWeight: '600',
+    flexShrink: 1,
+    ...type.caption,
+    color: colors.muted,
+    fontWeight: weight.regular,
+    fontVariant: ['tabular-nums'],
+  },
+  barcodeMore: {
+    flexShrink: 0,
+    ...type.caption,
+    color: colors.muted,
+    fontWeight: weight.regular,
+    fontVariant: ['tabular-nums'],
   },
   dragLayer: {
     position: 'absolute',
     left: 0,
     top: 0,
     zIndex: 20,
-    elevation: 20,
+    elevation: 24,
   },
   actionBarWrap: {
     position: 'absolute',
     left: 0,
     right: 0,
-    paddingHorizontal: 16,
+    paddingHorizontal: space.lg,
   },
   actionBar: {
     flexDirection: 'row',
     alignItems: 'stretch',
     backgroundColor: colors.card,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingVertical: 8,
-    ...shadow,
-    shadowOpacity: 0.14,
-    elevation: 8,
+    borderRadius: radius.xl,
+    paddingVertical: space.sm,
+    ...elevation.float,
   },
   action: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    borderRadius: 18,
+    gap: space.xs,
+    paddingVertical: space.xs,
+    borderRadius: radius.lg,
   },
   actionPressed: {
     backgroundColor: colors.bg,
   },
   actionIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
+    width: size.iconTile,
+    height: size.iconTile,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   actionLabel: {
-    fontSize: 12,
-    fontWeight: '800',
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   actionDivider: {
     width: StyleSheet.hairlineWidth,
     backgroundColor: colors.line,
-    marginVertical: 10,
+    marginVertical: space.md,
   },
   empty: {
-    marginTop: 48,
+    marginTop: space.xxl,
     alignItems: 'center',
-    paddingHorizontal: 24,
-    gap: 8,
+    paddingHorizontal: space.xl,
+    gap: space.sm,
   },
   emptyTitle: {
+    ...type.title,
     color: colors.ink,
-    fontSize: 18,
-    fontWeight: '800',
+    fontWeight: weight.bold,
   },
   emptyText: {
+    ...type.body,
     color: colors.muted,
-    fontSize: 14,
-    lineHeight: 21,
+    fontWeight: weight.regular,
     textAlign: 'center',
   },
   emptyAction: {
-    marginTop: 8,
-    height: 42,
-    paddingHorizontal: 18,
-    borderRadius: 14,
+    marginTop: space.sm,
+    minHeight: size.touch,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.md,
     backgroundColor: colors.tealSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyActionText: {
-    color: colors.teal,
-    fontSize: 14,
-    fontWeight: '800',
+    ...type.body,
+    color: colors.tealStrong,
+    fontWeight: weight.bold,
   },
 });

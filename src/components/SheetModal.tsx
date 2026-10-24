@@ -13,13 +13,13 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { colors, shadow } from '@/theme';
+import { colors, elevation, radius, space } from '@/theme';
 
 /** 面板跟随键盘升起/落下的时长；安卓拿不到系统的键盘动画时长，用观感接近的固定值。 */
 const LIFT_DURATION_MS = 180;
 
 /** 面板与弹窗顶部的固定间距：弹窗内容本身已经避开状态栏，这里只留一点呼吸空间。 */
-const TOP_GAP = 12;
+const TOP_GAP = space.md;
 
 type SheetModalProps = {
   visible: boolean;
@@ -140,11 +140,11 @@ const styles = StyleSheet.create({
     // 可用高度不足时先收缩面板自身，把空间让给面板内部的滚动区。
     flexShrink: 1,
     backgroundColor: colors.card,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 10,
-    paddingHorizontal: 18,
-    paddingBottom: 18,
-    ...shadow,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
+    paddingTop: space.md,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.lg,
+    ...elevation.sheet,
   },
 });

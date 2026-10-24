@@ -3,7 +3,7 @@ import { useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CHANGELOG_DATA } from '@/constants/changelog';
-import { colors, shadow } from '@/theme';
+import { colors, elevation, press, radius, space, textScale, type, weight } from '@/theme';
 
 export default function ChangelogScreen() {
   const scrollRef = useRef<ScrollView>(null);
@@ -24,7 +24,9 @@ export default function ChangelogScreen() {
               onPress={scrollToTop}
               accessibilityLabel="回到顶部"
             >
-              <Text style={styles.title}>更新日志</Text>
+              <Text style={styles.title} maxFontSizeMultiplier={textScale.title}>
+                更新日志
+              </Text>
             </Pressable>
           ),
         }}
@@ -32,9 +34,9 @@ export default function ChangelogScreen() {
       <ScrollView ref={scrollRef} style={styles.screen} contentContainerStyle={styles.content}>
         {CHANGELOG_DATA.map((entry) => (
           <View key={entry.version} style={styles.card}>
-            <Text style={styles.version}>{`v ${entry.version}：`}</Text>
+            <Text style={styles.version} maxFontSizeMultiplier={textScale.title}>{`v ${entry.version}：`}</Text>
             {entry.items.map((item, index) => (
-              <Text key={`${entry.version}-${index}`} style={styles.item}>{`- ${item}`}</Text>
+              <Text maxFontSizeMultiplier={textScale.body} key={`${entry.version}-${index}`} style={styles.item}>{`- ${item}`}</Text>
             ))}
           </View>
         ))}
@@ -54,34 +56,32 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    fontSize: 20,
-    fontWeight: '700',
+    ...type.heading,
+    fontWeight: weight.bold,
   },
   pressed: {
-    opacity: 0.7,
+    opacity: press.opacity,
   },
   content: {
-    padding: 16,
-    gap: 12,
-    paddingBottom: 32,
+    padding: space.lg,
+    gap: space.md,
+    paddingBottom: space.xxl,
   },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: 18,
-    ...shadow,
+    borderRadius: radius.lg,
+    padding: space.lg,
+    ...elevation.card,
   },
   version: {
     color: colors.ink,
-    fontSize: 17,
-    fontWeight: '800',
+    ...type.title,
+    fontWeight: weight.bold,
   },
   item: {
-    marginTop: 10,
+    marginTop: space.md,
     color: colors.ink,
-    fontSize: 14,
-    lineHeight: 21,
+    ...type.body,
+    fontWeight: weight.regular,
   },
 });

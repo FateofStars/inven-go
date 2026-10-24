@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, shadow } from '@/theme';
+import { colors, elevation, radius, size, space, textScale, type, weight } from '@/theme';
 
 type BarcodeReplaceSheetProps = {
   previous: string;
@@ -41,35 +41,37 @@ export function BarcodeReplaceSheet({ previous, next, onCancel, onConfirm }: Bar
         <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} accessibilityLabel="取消替换" />
       </Animated.View>
 
-      <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + 18, transform: [{ translateY }] }]}>
+      <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + space.lg, transform: [{ translateY }] }]}>
         <View style={styles.handle} />
-        <Text style={styles.title}>确认替换为新的条形码吗？</Text>
+        <Text style={styles.title} maxFontSizeMultiplier={textScale.title}>
+          确认替换为新的条形码吗？
+        </Text>
 
-        <Text style={styles.label}>旧条形码</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.label}>旧条形码</Text>
         <View style={styles.codeBox}>
-          <Text selectable={false} style={styles.codeText}>
+          <Text maxFontSizeMultiplier={textScale.body} selectable={false} style={styles.codeText}>
             {previous}
           </Text>
         </View>
 
         <View style={styles.arrowWrap}>
           <MaterialCommunityIcons name="arrow-down-bold" size={18} color={colors.green} />
-          <Text style={styles.arrowText}>替换为</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.arrowText}>替换为</Text>
         </View>
 
-        <Text style={styles.label}>新条形码</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.label}>新条形码</Text>
         <View style={[styles.codeBox, styles.codeBoxNew]}>
-          <Text selectable={false} style={[styles.codeText, styles.codeTextNew]}>
+          <Text maxFontSizeMultiplier={textScale.body} selectable={false} style={[styles.codeText, styles.codeTextNew]}>
             {next}
           </Text>
         </View>
 
         <View style={styles.actions}>
           <Pressable style={styles.cancel} onPress={onCancel}>
-            <Text style={styles.cancelText}>取消</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.cancelText}>取消</Text>
           </Pressable>
           <Pressable style={styles.confirm} onPress={onConfirm}>
-            <Text style={styles.confirmText}>确认替换</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.confirmText}>确认替换</Text>
           </Pressable>
         </View>
       </Animated.View>
@@ -88,94 +90,94 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: colors.card,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 10,
-    paddingHorizontal: 18,
-    ...shadow,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
+    paddingTop: space.md,
+    paddingHorizontal: space.lg,
+    ...elevation.sheet,
   },
   handle: {
     alignSelf: 'center',
-    width: 42,
-    height: 4,
-    borderRadius: 2,
+    width: size.sheetHandle,
+    height: space.xs,
+    borderRadius: radius.pill,
     backgroundColor: colors.line,
-    marginBottom: 12,
+    marginBottom: space.md,
   },
   title: {
     color: colors.ink,
-    fontSize: 20,
-    fontWeight: '800',
+    ...type.heading,
+    fontWeight: weight.bold,
   },
   label: {
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: space.lg,
+    marginBottom: space.sm,
     color: colors.muted,
-    fontSize: 13,
-    fontWeight: '700',
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   codeBox: {
-    borderRadius: 14,
+    borderRadius: radius.md,
     backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
   },
   codeBoxNew: {
     backgroundColor: colors.greenSoft,
-    borderColor: colors.green,
   },
   codeText: {
     color: colors.ink,
-    fontSize: 15,
+    ...type.body,
     fontVariant: ['tabular-nums'],
   },
   codeTextNew: {
-    color: colors.green,
-    fontWeight: '800',
+    color: colors.greenStrong,
+    fontWeight: weight.bold,
   },
   arrowWrap: {
-    marginTop: 10,
+    marginTop: space.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: space.sm,
   },
   arrowText: {
-    color: colors.green,
-    fontSize: 13,
-    fontWeight: '800',
+    color: colors.greenStrong,
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   actions: {
-    marginTop: 22,
+    marginTop: space.xl,
     flexDirection: 'row',
-    gap: 12,
+    gap: space.md,
   },
   cancel: {
     flex: 1,
-    height: 50,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bg,
   },
   cancelText: {
     color: colors.ink,
-    fontSize: 16,
-    fontWeight: '700',
+    ...type.bodyLg,
+    fontWeight: weight.regular,
   },
   confirm: {
     flex: 1.4,
-    height: 50,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.green,
+    // 行动一律用主题填充色；绿色只留给「新条码」这类状态标识。
+    backgroundColor: colors.teal,
   },
   confirmText: {
     color: colors.white,
-    fontSize: 16,
-    fontWeight: '800',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
 });

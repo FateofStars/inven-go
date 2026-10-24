@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { parseQuantityInput } from '@/lib/format';
-import { colors } from '@/theme';
+import { colors, press, radius, size, space, textScale, type, weight } from '@/theme';
 
 type QuantityStepperProps = {
   value: number;
@@ -48,7 +48,7 @@ export function QuantityStepper({ value, onChange, min = 0, max = 99999 }: Quant
         accessibilityLabel="减少数量"
         accessibilityState={{ disabled: atMin }}
       >
-        <MaterialCommunityIcons name="minus" size={20} color={atMin ? colors.muted : colors.clay} />
+        <MaterialCommunityIcons name="minus" size={20} color={atMin ? colors.muted : colors.clayStrong} />
       </Pressable>
       <TextInput
         value={String(value)}
@@ -56,6 +56,7 @@ export function QuantityStepper({ value, onChange, min = 0, max = 99999 }: Quant
         keyboardType="number-pad"
         selectTextOnFocus
         style={styles.input}
+        maxFontSizeMultiplier={textScale.title}
         accessibilityLabel="数量"
       />
       <Pressable
@@ -65,7 +66,7 @@ export function QuantityStepper({ value, onChange, min = 0, max = 99999 }: Quant
         accessibilityLabel="增加数量"
         accessibilityState={{ disabled: atMax }}
       >
-        <MaterialCommunityIcons name="plus" size={20} color={atMax ? colors.muted : colors.green} />
+        <MaterialCommunityIcons name="plus" size={20} color={atMax ? colors.muted : colors.greenStrong} />
       </Pressable>
     </View>
   );
@@ -75,32 +76,30 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: space.md,
   },
   step: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: size.control,
+    height: size.control,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.line,
   },
   pressed: {
-    opacity: 0.7,
+    opacity: press.opacity,
   },
   input: {
     flex: 1,
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.bg,
-    paddingHorizontal: 14,
+    paddingHorizontal: space.md,
     color: colors.ink,
-    fontSize: 18,
-    fontWeight: '800',
+    ...type.title,
+    fontWeight: weight.bold,
     textAlign: 'center',
+    fontVariant: ['tabular-nums'],
   },
 });

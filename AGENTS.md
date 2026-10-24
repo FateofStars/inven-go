@@ -40,6 +40,14 @@ Docs: https://docs.expo.dev/eas/index.md
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
 
+## UI 设计与审查规范
+
+本项目 UI 的设计、修改与评审，统一以 [`skills/refactoring-ui/skills/refactoring-ui/SKILL.md`](skills/refactoring-ui/skills/refactoring-ui/SKILL.md) 为审查规范。
+
+- 任何涉及新建页面/组件、调整样式、排查「界面不好看」、做设计评审或建立设计 token 的任务，**先**读该 SKILL.md，按其路由表（Workflow A/B/C/D）决定下一步。
+- 该文件会指向 `references/` 下的专题文档，**按需逐份加载**，不要一次性读完整个 `references/` 目录。
+- SKILL.md 中的 Tailwind 映射与 CSS 示例仅作参考，落地到本 RN 项目时需换算为 StyleSheet / 现有主题 token 的等价写法；项目已有的设计系统优先于该规范。
+
 ## 版本升级与更新日志规范
 
 **触发条件**：当用户同时表达下面两层意思时触发（**不限定具体措辞**，语义相近即可）：

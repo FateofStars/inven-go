@@ -3,7 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { QuantityStepper } from '@/components/QuantityStepper';
 import { SheetModal } from '@/components/SheetModal';
-import { colors } from '@/theme';
+import { colors, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 type QuantitySheetProps = {
   visible: boolean;
@@ -40,21 +40,25 @@ export function QuantitySheet({
   const insets = useSafeAreaInsets();
 
   return (
-    <SheetModal visible={visible} onRequestClose={onClose} sheetStyle={{ paddingBottom: insets.bottom + 18 }}>
+    <SheetModal visible={visible} onRequestClose={onClose} sheetStyle={{ paddingBottom: insets.bottom + space.lg }}>
       <View style={styles.handle} />
       {/* 可用高度不够时（例如小屏 + 键盘）由这里滚动，底部的取消/确认始终留在键盘之上。 */}
       <ScrollView style={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.name}>{productName}</Text>
-        {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+        <Text style={styles.title} maxFontSizeMultiplier={textScale.title}>
+          {title}
+        </Text>
+        <Text style={styles.name} maxFontSizeMultiplier={textScale.title}>
+          {productName}
+        </Text>
+        {hint ? <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>{hint}</Text> : null}
 
-        <Text style={styles.label}>入库数量</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.label}>入库数量</Text>
         <QuantityStepper value={quantity} onChange={onChangeQuantity} min={min} />
       </ScrollView>
 
       <View style={styles.actions}>
         <Pressable style={styles.cancel} onPress={onClose} disabled={busy}>
-          <Text style={styles.cancelText}>取消</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.cancelText}>取消</Text>
         </Pressable>
         <Pressable
           style={[styles.confirm, busy && styles.disabled]}
@@ -62,7 +66,7 @@ export function QuantitySheet({
           disabled={busy}
           accessibilityState={{ disabled: busy }}
         >
-          <Text style={styles.confirmText}>{busy ? '处理中…' : confirmLabel}</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.confirmText}>{busy ? '处理中…' : confirmLabel}</Text>
         </Pressable>
       </View>
     </SheetModal>
@@ -75,68 +79,70 @@ const styles = StyleSheet.create({
   },
   handle: {
     alignSelf: 'center',
-    width: 42,
-    height: 4,
-    borderRadius: 2,
+    width: size.sheetHandle,
+    height: space.xs,
+    borderRadius: radius.pill,
     backgroundColor: colors.line,
-    marginBottom: 12,
+    marginBottom: space.md,
   },
   title: {
     color: colors.ink,
-    fontSize: 22,
-    fontWeight: '800',
+    ...type.heading,
+    fontWeight: weight.bold,
   },
   name: {
-    marginTop: 8,
-    color: colors.teal,
-    fontSize: 17,
-    fontWeight: '800',
+    marginTop: space.sm,
+    color: colors.tealStrong,
+    ...type.title,
+    fontWeight: weight.bold,
   },
   hint: {
-    marginTop: 6,
+    marginTop: space.sm,
     color: colors.muted,
-    fontSize: 13,
-    lineHeight: 19,
+    ...type.body,
+    fontWeight: weight.regular,
   },
   label: {
-    marginTop: 18,
-    marginBottom: 8,
+    marginTop: space.xl,
+    marginBottom: space.sm,
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: '700',
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   actions: {
-    marginTop: 20,
+    marginTop: space.xl,
     flexDirection: 'row',
-    gap: 12,
+    gap: space.md,
   },
   cancel: {
     flex: 1,
-    height: 50,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bg,
   },
   cancelText: {
     color: colors.ink,
-    fontSize: 16,
-    fontWeight: '700',
+    ...type.bodyLg,
+    fontWeight: weight.regular,
   },
   confirm: {
     flex: 1.4,
-    height: 50,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.teal,
   },
   confirmText: {
     color: colors.white,
-    fontSize: 16,
-    fontWeight: '800',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   disabled: {
-    opacity: 0.6,
+    opacity: state.disabled,
   },
 });

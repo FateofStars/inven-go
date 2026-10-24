@@ -11,7 +11,7 @@ import {
   type DimensionValue,
 } from 'react-native';
 
-import { colors, shadow } from '@/theme';
+import { colors, elevation, press, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 type CenterCardProps = {
   visible: boolean;
@@ -19,7 +19,7 @@ type CenterCardProps = {
   description?: string;
   confirmLabel?: string;
   cancelLabel?: string;
-  confirmTone?: 'teal' | 'danger' | 'green' | 'navy';
+  confirmTone?: 'teal' | 'danger' | 'navy';
   confirmDisabled?: boolean;
   /** 纯选择型弹窗可以只保留一个关闭按钮。 */
   showConfirm?: boolean;
@@ -27,7 +27,7 @@ type CenterCardProps = {
   header?: ReactNode;
   /** 位于按钮行下方的补充区块（例如「新建数据库」里可选的预导入入口）。 */
   footer?: ReactNode;
-  /** 按钮行与上方内容的间距，默认 22；表单类弹窗可收紧到与内部节奏一致。 */
+  /** 按钮行与上方内容的间距，默认 24；表单类弹窗可收紧到与内部节奏一致。 */
   actionsSpacing?: number;
   /** 内容超长可滚动时是否显示纵向滚动条；默认隐藏，保持弹窗观感干净。 */
   showScrollIndicator?: boolean;
@@ -49,7 +49,7 @@ export function CenterCard({
   showConfirm = true,
   header,
   footer,
-  actionsSpacing = 22,
+  actionsSpacing = space.xl,
   showScrollIndicator = false,
   cardMaxHeight = '100%',
   onConfirm,
@@ -64,8 +64,10 @@ export function CenterCard({
         keyboardVerticalOffset={0}
       >
         <View style={[styles.card, { maxHeight: cardMaxHeight }]}>
-          <Text style={styles.title}>{title}</Text>
-          {description ? <Text style={styles.description}>{description}</Text> : null}
+          <Text style={styles.title} maxFontSizeMultiplier={textScale.title}>
+            {title}
+          </Text>
+          {description ? <Text maxFontSizeMultiplier={textScale.body} style={styles.description}>{description}</Text> : null}
           {/* 固定头部：常驻在标题下方，不参与滚动。 */}
           {header ? <View style={styles.headerBlock}>{header}</View> : null}
           {children ? (
@@ -83,7 +85,7 @@ export function CenterCard({
               style={({ pressed }) => [styles.cancel, pressed && styles.pressed]}
               onPress={showConfirm ? onCancel : onConfirm}
             >
-              <Text style={styles.cancelText}>{cancelLabel}</Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.cancelText}>{cancelLabel}</Text>
             </Pressable>
             {showConfirm ? (
               <Pressable
@@ -97,7 +99,7 @@ export function CenterCard({
                 disabled={confirmDisabled}
                 accessibilityState={{ disabled: confirmDisabled }}
               >
-                <Text style={styles.confirmText}>{confirmLabel}</Text>
+                <Text maxFontSizeMultiplier={textScale.body} style={styles.confirmText}>{confirmLabel}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -112,7 +114,6 @@ export function CenterCard({
 const confirmToneStyle = {
   teal: { backgroundColor: colors.teal },
   danger: { backgroundColor: colors.danger },
-  green: { backgroundColor: colors.green },
   navy: { backgroundColor: colors.navy },
 } as const;
 
@@ -122,15 +123,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.scrim,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: space.xl,
   },
   card: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: size.modalMaxWidth,
     backgroundColor: colors.card,
-    borderRadius: 24,
-    padding: 22,
-    ...shadow,
+    borderRadius: radius.xl,
+    padding: space.xl,
+    ...elevation.modal,
   },
   content: {
     flexGrow: 0,
@@ -138,64 +139,63 @@ const styles = StyleSheet.create({
   },
   contentInner: {
     /** 首个子元素与说明文字之间、以及各区块之间统一留出 12px 的垂直节奏。 */
-    paddingTop: 12,
-    paddingBottom: 2,
-    gap: 12,
+    paddingTop: space.md,
+    paddingBottom: 0,
+    gap: space.md,
   },
   title: {
     color: colors.ink,
-    fontSize: 20,
-    fontWeight: '700',
+    ...type.heading,
+    fontWeight: weight.bold,
   },
   description: {
-    marginTop: 10,
+    marginTop: space.sm,
     color: colors.muted,
-    fontSize: 15,
-    lineHeight: 22,
+    ...type.body,
+    fontWeight: weight.regular,
   },
   headerBlock: {
-    marginTop: 12,
+    marginTop: space.md,
   },
   footerBlock: {
-    marginTop: 12,
+    marginTop: space.md,
   },
   actions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: space.md,
   },
   cancel: {
     flex: 1,
-    height: 48,
-    borderRadius: 14,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bg,
-    borderWidth: 1,
-    borderColor: colors.line,
   },
   cancelText: {
     color: colors.ink,
-    fontSize: 16,
-    fontWeight: '600',
+    ...type.bodyLg,
+    fontWeight: weight.regular,
   },
   confirm: {
     flex: 1,
-    height: 48,
-    borderRadius: 14,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   confirmDisabled: {
-    opacity: 0.4,
+    opacity: state.disabled,
   },
   confirmText: {
     color: colors.white,
-    fontSize: 16,
-    fontWeight: '700',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
-  /** 统一按下反馈：轻微下沉 + 透明淡出。 */
+  /** 统一按压反馈。 */
   pressed: {
-    opacity: 0.5,
-    transform: [{ scale: 0.96 }],
+    opacity: press.opacity,
   },
 });

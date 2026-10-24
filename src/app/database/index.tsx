@@ -26,14 +26,10 @@ import { parseDatabase } from '@/lib/database';
 import { latestActivity, validateDatabaseName, type DatabaseSummary } from '@/lib/databases';
 import { formatTimestamp } from '@/lib/format';
 import type { ImportMode, InventoryDatabase } from '@/lib/types';
-import { colors, shadow } from '@/theme';
+import { colors, elevation, press, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 /** 重置全部数据库必须精准输入的确认词（区分大小写）。 */
 const CLEAR_CONFIRM_WORD = 'Yes';
-
-/** 「包含历史日志」卡片的琥珀色标识。 */
-const LOG_ACCENT = '#D97706';
-const LOG_ACCENT_SOFT = '#FEF3C7';
 
 type BusyState = 'switch' | 'export' | 'clipboard' | 'import' | 'name' | 'delete' | 'reset' | null;
 
@@ -493,7 +489,9 @@ export default function DatabaseScreen() {
               onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })}
               accessibilityLabel="回到顶部"
             >
-              <Text style={styles.headerTitle}>数据库管理</Text>
+              <Text style={styles.headerTitle} maxFontSizeMultiplier={textScale.title}>
+                数据库管理
+              </Text>
             </Pressable>
           ),
           headerRight: () => (
@@ -501,21 +499,23 @@ export default function DatabaseScreen() {
               style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
               onPress={openCreate}
               accessibilityLabel="新建数据库"
+              hitSlop={space.sm}
             >
-              <MaterialCommunityIcons name="plus" size={22} color={colors.green} />
+              <MaterialCommunityIcons name="plus" size={16} color={colors.white} />
             </Pressable>
           ),
         }}
       />
 
       <ScrollView ref={scrollRef} style={styles.screen} contentContainerStyle={styles.content}>
-        <Text style={styles.sectionTitle}>本机数据库</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.sectionTitle}>本机数据库</Text>
 
         {databases.map((item) => {
           const active = item.id === activeDatabaseId;
-          // 当前使用的库用主题绿高亮，其余用中性灰，一眼分辨。
-          const accent = active ? colors.green : colors.muted;
-          const soft = active ? colors.greenSoft : colors.line;
+          // 选中的库用墨绿标题，其余下沉到深灰：同一列表里只有一个彩色标题，视线自然被它吸住。
+          const titleColor = active ? colors.greenStrong : colors.muted;
+          const iconColor = active ? colors.green : colors.muted;
+          const soft = active ? colors.greenSoft : colors.bg;
           return (
             <Swipeable
               key={item.id}
@@ -532,8 +532,8 @@ export default function DatabaseScreen() {
                     icon="database-import-outline"
                     label="导入数据库"
                     color={colors.green}
+                    textColor={colors.greenStrong}
                     background={colors.greenSoft}
-                    border={colors.green}
                     height={cardHeight}
                     onPress={() => {
                       swipeable.close();
@@ -544,8 +544,8 @@ export default function DatabaseScreen() {
                     icon="database-export-outline"
                     label="导出数据库"
                     color={colors.navy}
+                    textColor={colors.navyStrong}
                     background={colors.navySoft}
-                    border={colors.navy}
                     height={cardHeight}
                     onPress={() => {
                       swipeable.close();
@@ -561,8 +561,8 @@ export default function DatabaseScreen() {
                     icon="pencil-outline"
                     label="修改名称"
                     color={colors.navy}
+                    textColor={colors.navyStrong}
                     background={colors.navySoft}
-                    border={colors.navy}
                     height={cardHeight}
                     onPress={() => {
                       swipeable.close();
@@ -573,8 +573,8 @@ export default function DatabaseScreen() {
                     icon="trash-can-outline"
                     label="删除数据库"
                     color={colors.danger}
+                    textColor={colors.dangerStrong}
                     background={colors.dangerSoft}
-                    border={colors.danger}
                     height={cardHeight}
                     disabled={onlyOne}
                     onPress={() => {
@@ -591,27 +591,28 @@ export default function DatabaseScreen() {
               )}
             >
               <Pressable
-                style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+                style={({ pressed }) => [styles.card, active && styles.cardActive, pressed && styles.cardPressed]}
                 onPress={() => void handleSwitch(item)}
                 onLayout={(event) => setCardHeight(event.nativeEvent.layout.height)}
                 accessibilityLabel={`切换到数据库 ${item.name}`}
+                accessibilityState={{ selected: active }}
               >
                 <View style={[styles.cardIcon, { backgroundColor: soft }]}>
-                  <MaterialCommunityIcons name="database" size={22} color={accent} />
+                  <MaterialCommunityIcons name="database" size={22} color={iconColor} />
                 </View>
                 <View style={styles.cardBody}>
                   <View style={styles.cardHead}>
-                    <Text numberOfLines={1} style={[styles.cardTitle, { color: accent }]}>
+                    <Text maxFontSizeMultiplier={textScale.body} numberOfLines={1} style={[styles.cardTitle, { color: titleColor }]}>
                       {item.name}
                     </Text>
                     {active ? (
                       <View style={styles.activeBadge}>
-                        <MaterialCommunityIcons name="check-circle" size={13} color={colors.green} />
-                        <Text style={styles.activeText}>使用中</Text>
+                        <MaterialCommunityIcons name="check-circle" size={13} color={colors.greenStrong} />
+                        <Text maxFontSizeMultiplier={textScale.body} style={styles.activeText}>使用中</Text>
                       </View>
                     ) : null}
                   </View>
-                  <Text style={styles.cardText}>
+                  <Text maxFontSizeMultiplier={textScale.body} style={styles.cardText}>
                     {`${item.productCount} 个商品 · ${item.logCount} 条日志 · 最后更新 ${formatTimestamp(item.updatedAt)}`}
                   </Text>
                 </View>
@@ -620,9 +621,9 @@ export default function DatabaseScreen() {
           );
         })}
 
-        <Text style={styles.hint}>右滑卡片可导入或导出该库的备份，左滑可改名或删除。</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>右滑卡片可导入或导出该库的备份，左滑可改名或删除。</Text>
 
-        <Text style={styles.sectionTitle}>危险操作</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={[styles.sectionTitle, styles.sectionTitleSpaced]}>危险操作</Text>
         <Pressable
           style={({ pressed }) => [styles.card, styles.cardOffset, pressed && styles.cardPressed]}
           onPress={() => {
@@ -635,8 +636,8 @@ export default function DatabaseScreen() {
             <MaterialCommunityIcons name="database-remove-outline" size={22} color={colors.danger} />
           </View>
           <View style={styles.cardBody}>
-            <Text style={[styles.cardTitle, { color: colors.danger }]}>重置所有数据库</Text>
-            <Text style={styles.cardText}>清空本机保存的所有数据库，不可恢复。</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={[styles.cardTitle, { color: colors.dangerStrong }]}>重置所有数据库</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.cardText}>清空本机保存的所有数据库，不可恢复。</Text>
           </View>
         </Pressable>
       </ScrollView>
@@ -646,7 +647,7 @@ export default function DatabaseScreen() {
         title={nameDialog?.mode === 'create' ? '新建数据库' : '修改数据库名称'}
         description="仅支持中文、英文、数字及符号 . - _（英文不区分大小写）"
         confirmLabel={nameDialog?.mode === 'create' ? '确认创建' : '确认修改'}
-        confirmTone={nameDialog?.mode === 'create' ? 'green' : 'navy'}
+        confirmTone={nameDialog?.mode === 'rename' ? 'navy' : 'teal'}
         confirmDisabled={!nameCheck.ok}
         cardMaxHeight="88%"
         // 新建弹窗里「输入框 → 按钮 → 导入入口」三层间距统一为 12。
@@ -668,6 +669,7 @@ export default function DatabaseScreen() {
             placeholder="输入数据库名称"
             placeholderTextColor={colors.muted}
             style={styles.nameInput}
+            maxFontSizeMultiplier={textScale.body}
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="off"
@@ -689,7 +691,7 @@ export default function DatabaseScreen() {
             <View style={styles.errorDot}>
               <MaterialCommunityIcons name="close" size={12} color={colors.card} />
             </View>
-            <Text style={styles.errorText}>{nameError}</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.errorText}>{nameError}</Text>
           </View>
         ) : null}
       </CenterCard>
@@ -710,8 +712,9 @@ export default function DatabaseScreen() {
           <PillRow
             compact
             icon="file-document-outline"
-            color={LOG_ACCENT}
-            soft={LOG_ACCENT_SOFT}
+            color={colors.warning}
+            titleColor={colors.warningStrong}
+            soft={colors.warningSoft}
             title="包含历史日志"
             text="开启备份全部流水；关闭仅备份当前库存"
             switchValue={includeLogs}
@@ -722,6 +725,7 @@ export default function DatabaseScreen() {
             compact
             icon="share-variant-outline"
             color={colors.teal}
+            titleColor={colors.tealStrong}
             soft={colors.tealSoft}
             title="通过系统分享导出"
             text="生成 JSON 文件并交给系统分享"
@@ -733,6 +737,7 @@ export default function DatabaseScreen() {
             compact
             icon="content-copy"
             color={colors.navy}
+            titleColor={colors.navyStrong}
             soft={colors.navySoft}
             title="复制 JSON 到剪贴板"
             text="粘贴到任意聊天或备忘录即可备份"
@@ -741,7 +746,7 @@ export default function DatabaseScreen() {
             onPress={() => void handleCopyExport()}
           />
         </View>
-        <Text style={styles.hint}>该库当前有 {snapshots.length} 份本机快照，导入时可直接还原。</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>该库当前有 {snapshots.length} 份本机快照，导入时可直接还原。</Text>
       </CenterCard>
 
       <CenterCard
@@ -765,6 +770,7 @@ export default function DatabaseScreen() {
             compact
             icon="content-paste"
             color={colors.navy}
+            titleColor={colors.navyStrong}
             soft={colors.navySoft}
             title="从剪贴板文本导入"
             text="自动读取剪贴板，也可手动粘贴 JSON"
@@ -775,6 +781,7 @@ export default function DatabaseScreen() {
             compact
             icon="file-document-outline"
             color={colors.teal}
+            titleColor={colors.tealStrong}
             soft={colors.tealSoft}
             title="从手机文件选取导入"
             text="调起系统文件管理器选择 JSON"
@@ -787,13 +794,13 @@ export default function DatabaseScreen() {
         {/* 预导入是为尚未创建的新库准备的，没有本机快照可言，这里不展示快照区。 */}
         {importPurpose === 'preload' ? null : (
           <>
-            <Text style={styles.sectionTitle}>历史备份快照</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.sectionTitle}>历史备份快照</Text>
             {snapshotsLoading ? (
               <View style={styles.snapshotLoading}>
                 <ActivityIndicator color={colors.navy} />
               </View>
             ) : snapshots.length === 0 ? (
-              <Text style={styles.hint}>该数据库还没有本机快照。每次成功导出都会自动生成一份。</Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>该数据库还没有本机快照。每次成功导出都会自动生成一份。</Text>
             ) : (
               <View style={styles.rows}>
                 {snapshots.map((snapshot) => (
@@ -802,6 +809,7 @@ export default function DatabaseScreen() {
                     compact
                     icon="history"
                     color={colors.clay}
+                    titleColor={colors.clayStrong}
                     soft={colors.claySoft}
                     title={formatTimestamp(snapshot.createdAt)}
                     text={
@@ -834,7 +842,7 @@ export default function DatabaseScreen() {
           onPress={() => void handlePasteEntry()}
         >
           <MaterialCommunityIcons name="content-paste" size={18} color={colors.navy} />
-          <Text style={styles.clipboardButtonText}>重新读取剪贴板</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.clipboardButtonText}>重新读取剪贴板</Text>
         </Pressable>
         <TextInput
           value={textValue}
@@ -845,12 +853,13 @@ export default function DatabaseScreen() {
           placeholder='在此粘贴 {"version":1,"products":[...],"logs":[...]}'
           placeholderTextColor={colors.muted}
           style={styles.textArea}
+          maxFontSizeMultiplier={textScale.body}
           multiline
           textAlignVertical="top"
           autoCapitalize="none"
           autoCorrect={false}
         />
-        {textError ? <Text style={styles.fieldError}>{textError}</Text> : null}
+        {textError ? <Text maxFontSizeMultiplier={textScale.body} style={styles.fieldError}>{textError}</Text> : null}
       </CenterCard>
 
       <CenterCard
@@ -872,15 +881,15 @@ export default function DatabaseScreen() {
             style={[styles.mode, importMode === 'merge' && styles.modeActive]}
             onPress={() => setImportMode('merge')}
           >
-            <Text style={[styles.modeTitle, importMode === 'merge' && styles.modeTitleActive]}>合并</Text>
-            <Text style={styles.modeText}>保留本机记录，按商品合并条码与库存。</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={[styles.modeTitle, importMode === 'merge' && styles.modeTitleActive]}>合并</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.modeText}>保留本机记录，按商品合并条码与库存。</Text>
           </Pressable>
           <Pressable
             style={[styles.mode, importMode === 'replace' && styles.modeDanger]}
             onPress={() => setImportMode('replace')}
           >
-            <Text style={[styles.modeTitle, importMode === 'replace' && styles.modeDangerTitle]}>覆盖</Text>
-            <Text style={styles.modeText}>用备份内容替换当前库存和日志。</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={[styles.modeTitle, importMode === 'replace' && styles.modeDangerTitle]}>覆盖</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.modeText}>用备份内容替换当前库存和日志。</Text>
           </Pressable>
         </View>
       </CenterCard>
@@ -897,7 +906,7 @@ export default function DatabaseScreen() {
       >
         <View style={styles.warnBox}>
           <MaterialCommunityIcons name="alert-outline" size={18} color={colors.danger} />
-          <Text style={styles.warnText}>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.warnText}>
             该库名下的本机快照会一并清除，操作不可恢复。建议先右滑导出备份。
           </Text>
         </View>
@@ -915,7 +924,7 @@ export default function DatabaseScreen() {
       >
         <View style={styles.warnBox}>
           <MaterialCommunityIcons name="alert-outline" size={18} color={colors.danger} />
-          <Text style={styles.warnText}>重置后本机数据无法找回，建议先逐库导出备份。</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.warnText}>重置后本机数据无法找回，建议先逐库导出备份。</Text>
         </View>
         <TextInput
           value={resetInput}
@@ -923,13 +932,14 @@ export default function DatabaseScreen() {
           placeholder="请输入 Yes 确认重置"
           placeholderTextColor={colors.muted}
           style={styles.confirmInput}
+          maxFontSizeMultiplier={textScale.body}
           autoCapitalize="none"
           autoCorrect={false}
           autoComplete="off"
           spellCheck={false}
           returnKeyType="done"
         />
-        <Text style={styles.confirmHint}>区分大小写，需精准输入 {CLEAR_CONFIRM_WORD} 才能点击确认重置。</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.confirmHint}>区分大小写，需精准输入 {CLEAR_CONFIRM_WORD} 才能点击确认重置。</Text>
       </CenterCard>
 
       {toast ? (
@@ -937,7 +947,7 @@ export default function DatabaseScreen() {
           message={toast.message}
           tone={toast.tone}
           actionHint={toast.actionHint}
-          bottom={insets.bottom + 24}
+          bottom={insets.bottom + space.xl}
         />
       ) : null}
     </View>
@@ -949,7 +959,7 @@ function DatabaseBanner({ name }: { name: string }) {
   return (
     <View style={styles.banner}>
       <MaterialCommunityIcons name="database" size={15} color={colors.green} />
-      <Text numberOfLines={1} style={styles.bannerText}>{`当前操作数据库：【${name}】`}</Text>
+      <Text maxFontSizeMultiplier={textScale.body} numberOfLines={1} style={styles.bannerText}>{`当前操作数据库：【${name}】`}</Text>
     </View>
   );
 }
@@ -988,18 +998,18 @@ function PreloadCard({ preload, disabled, onPress }: PreloadCardProps) {
         />
       </View>
       <View style={styles.cardBody}>
-        <Text style={[styles.preloadTitle, { color: accent }]}>
+        <Text maxFontSizeMultiplier={textScale.body} style={[styles.preloadTitle, { color: accent }]}>
           {ready ? '导入成功' : '导入数据库'}
         </Text>
         {preload ? (
           <>
-            <Text style={styles.cardText}>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.cardText}>
               {`包含 ${preload.data.products.length} 个商品 · ${preload.data.logs.length} 条日志 · 最后更新 ${formatTimestamp(preload.updatedAt)}`}
             </Text>
-            <Text style={styles.cardText}>再次点击可以重新导入</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.cardText}>再次点击可以重新导入</Text>
           </>
         ) : (
-          <Text style={styles.cardText}>选择现有备份直接填充新建库（可选）</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.cardText}>选择现有备份直接填充新建库（可选）</Text>
         )}
       </View>
     </Pressable>
@@ -1009,22 +1019,24 @@ function PreloadCard({ preload, disabled, onPress }: PreloadCardProps) {
 type SwipeActionProps = {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   label: string;
+  /** 图标主色，取语义色的 `base` 档。 */
   color: string;
+  /** 标签字色，取同色相的 `strong` 档，与图标拉开一层。 */
+  textColor: string;
   background: string;
-  border?: string;
   /** 与数据库卡片对齐的高度（取卡片实测高度），保证上下边缘与卡片一致。 */
   height?: number;
   disabled?: boolean;
   onPress: () => void;
 };
 
-/** 数据库卡片滑出的操作按钮：浅色底 + 正色字 + 1px 描边。 */
+/** 数据库卡片滑出的操作按钮：浅色底 + 正色图标 + 深色字。 */
 function SwipeAction({
   icon,
   label,
   color,
+  textColor,
   background,
-  border,
   height = 0,
   disabled = false,
   onPress,
@@ -1033,7 +1045,7 @@ function SwipeAction({
     <Pressable
       style={({ pressed }) => [
         styles.action,
-        { backgroundColor: background, borderColor: border ?? background },
+        { backgroundColor: background },
         height > 0 ? { height } : null,
         pressed && styles.pressed,
         disabled && styles.actionDisabled,
@@ -1042,8 +1054,8 @@ function SwipeAction({
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
     >
-      <MaterialCommunityIcons name={icon} size={19} color={color} />
-      <Text style={[styles.actionText, { color }]}>{label}</Text>
+      <MaterialCommunityIcons name={icon} size={20} color={color} />
+      <Text maxFontSizeMultiplier={textScale.body} style={[styles.actionText, { color: textColor }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -1054,317 +1066,335 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   content: {
-    // 左右各留 10，配合 swipeRow 的 6px 留白，卡片正好与页面 16px 边距对齐。
-    paddingHorizontal: 10,
-    paddingTop: 16,
-    paddingBottom: 32,
-    gap: 6,
+    // 左右各留 8，配合 swipeRow 的 8px 留白，卡片正好对齐页面 16px 边距。
+    // 纵向节奏交给各元素自身的外边距，卡片间距由 swipeRow 的对称内边距撑出。
+    paddingHorizontal: space.sm,
+    paddingTop: space.md,
+    paddingBottom: space.xxl,
+    gap: 0,
   },
   titleTap: {
     alignSelf: 'flex-start',
   },
   headerTitle: {
     color: colors.ink,
-    fontSize: 20,
-    fontWeight: '700',
+    ...type.heading,
+    fontWeight: weight.bold,
   },
+  /** 二级界面头部按钮：紧凑行动按钮（32 + 16 图标）。 */
   headerButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
+    width: size.actionCompact,
+    height: size.actionCompact,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.greenSoft,
+    backgroundColor: colors.teal,
   },
-  /** 统一按下反馈：轻微下沉 + 透明淡出。 */
+  /** 统一按压反馈。 */
   pressed: {
-    opacity: 0.5,
-    transform: [{ scale: 0.96 }],
+    opacity: press.opacity,
   },
   sectionTitle: {
-    marginHorizontal: 6,
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: '800',
+    marginHorizontal: space.sm,
+    marginBottom: space.xs,
+    color: colors.muted,
+    ...type.caption,
+    fontWeight: weight.bold,
+  },
+  /** 第二个分组标题：与上一组拉开距离，区分「本机数据库 / 危险操作」。 */
+  sectionTitleSpaced: {
+    marginTop: space.lg,
   },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: space.md,
     backgroundColor: colors.card,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    ...shadow,
+    borderRadius: radius.lg,
+    // 顶部强调条以边框实现：始终落在圆角内缘，不会与圆角图案冲突。
+    // 未选中时用透明边占位，保证所有卡片高度与内容基线完全一致。
+    borderTopWidth: space.xs,
+    borderTopColor: 'transparent',
+    paddingHorizontal: space.lg,
+    // 12 + 4px 边框 = 视觉上仍是 16 的上内边距。
+    paddingTop: space.md,
+    paddingBottom: space.lg,
+    ...elevation.card,
+  },
+  /** 使用中的数据库：顶部 4px 主题绿强调条。 */
+  cardActive: {
+    borderTopColor: colors.green,
   },
   cardPressed: {
     backgroundColor: colors.bg,
   },
   cardIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
+    width: size.iconTile,
+    height: size.iconTile,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cardBody: {
     flex: 1,
-    gap: 4,
+    gap: space.xs,
   },
   cardHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    gap: space.sm,
   },
   cardTitle: {
     flexShrink: 1,
-    fontSize: 16,
-    fontWeight: '800',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   cardText: {
     color: colors.muted,
-    fontSize: 12,
-    lineHeight: 17,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
+  /**
+   * 「使用中」徽标：高度钉死在标题行高以内（18 + 4 = 22 < 24），
+   * 这样选中态不会把标题行撑高，卡片高度始终一致。
+   */
   activeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: space.xs,
+    height: type.caption.lineHeight + space.xs,
     backgroundColor: colors.greenSoft,
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
   },
   activeText: {
-    color: colors.green,
-    fontSize: 11,
-    fontWeight: '800',
+    color: colors.greenStrong,
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   hint: {
-    marginHorizontal: 6,
+    marginHorizontal: space.sm,
+    marginTop: space.xs,
+    marginBottom: space.xs,
     color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
-  /** Swipeable 容器会裁掉溢出内容，四周都留出空间，卡片阴影才不会被切平。 */
+  /**
+   * Swipeable 容器会裁掉溢出内容，上下对称留 8 既能完整容纳阴影，
+   * 又让卡片正好落在容器垂直中线上 —— 左右滑出的按钮按中线居中后与卡片严丝合缝。
+   */
   swipeRow: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm,
   },
-  /** 不在 Swipeable 里的独立卡片（如「重置所有数据库」）需要手动对齐左右留白。 */
+  /** 不在 Swipeable 里的独立卡片（如「重置所有数据库」）需要手动对齐左右与上方留白。 */
   cardOffset: {
-    marginHorizontal: 6,
+    marginHorizontal: space.sm,
+    marginTop: space.sm,
   },
   swipeActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 8,
+    gap: space.sm,
+    paddingHorizontal: space.sm,
     backgroundColor: colors.bg,
   },
   action: {
-    width: 76,
+    width: size.swipeAction,
     // 与数据库卡片保持同一圆角，滑动时视觉不割裂。
-    borderRadius: 20,
-    borderWidth: 1,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: space.xs,
   },
   actionText: {
-    fontSize: 11,
-    fontWeight: '800',
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   actionDisabled: {
-    opacity: 0.4,
+    opacity: state.disabled,
   },
   rows: {
-    gap: 8,
+    gap: space.sm,
   },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: space.sm,
     backgroundColor: colors.greenSoft,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
   bannerText: {
     flex: 1,
-    color: colors.green,
-    fontSize: 12,
-    fontWeight: '800',
+    color: colors.greenStrong,
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    height: 50,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
+    gap: space.sm,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.bg,
-    paddingHorizontal: 12,
+    paddingHorizontal: space.md,
   },
   inputRowError: {
+    borderWidth: 1,
     borderColor: colors.danger,
   },
   nameInput: {
     flex: 1,
     height: '100%',
     color: colors.ink,
-    fontSize: 15,
+    ...type.body,
   },
   inputClear: {
-    width: 26,
-    height: 26,
+    width: size.touch,
+    height: size.touch,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  /** 「新建数据库」里可选的预导入入口：无描边，靠全 App 统一的悬浮阴影立起来。 */
+  /** 「新建数据库」里可选的预导入入口：靠统一的卡片海拔立起来。 */
   preloadCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    ...shadow,
+    gap: space.md,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+    ...elevation.card,
   },
   preloadIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 11,
+    width: size.iconTileSm,
+    height: size.iconTileSm,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.card,
   },
   preloadTitle: {
-    fontSize: 15,
-    fontWeight: '800',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   errorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: space.sm,
   },
   // 红色圆形底块 + 与弹窗同色的微型 × 图标
   errorDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: size.badge,
+    height: size.badge,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.danger,
   },
   errorText: {
     flex: 1,
-    color: colors.danger,
-    fontSize: 13,
-    fontWeight: '700',
+    color: colors.dangerStrong,
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   snapshotLoading: {
-    paddingVertical: 18,
+    paddingVertical: space.lg,
     alignItems: 'center',
   },
   clipboardButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    height: 42,
-    borderRadius: 14,
+    gap: space.sm,
+    minHeight: size.touch,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
     backgroundColor: colors.navySoft,
   },
   clipboardButtonText: {
-    color: colors.navy,
-    fontSize: 14,
-    fontWeight: '800',
+    color: colors.navyStrong,
+    ...type.body,
+    fontWeight: weight.bold,
   },
   textArea: {
-    height: 150,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
+    height: size.textAreaHeight,
+    borderRadius: radius.md,
     backgroundColor: colors.bg,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
     color: colors.ink,
-    fontSize: 13,
-    lineHeight: 18,
+    ...type.body,
   },
   fieldError: {
-    color: colors.danger,
-    fontSize: 13,
-    fontWeight: '600',
+    color: colors.dangerStrong,
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   modes: {
-    gap: 10,
+    gap: space.sm,
   },
   mode: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: 12,
+    borderRadius: radius.md,
+    padding: space.md,
     backgroundColor: colors.bg,
   },
   modeActive: {
-    borderColor: colors.teal,
     backgroundColor: colors.tealSoft,
   },
   modeDanger: {
-    borderColor: colors.danger,
     backgroundColor: colors.dangerSoft,
   },
   modeTitle: {
     color: colors.ink,
-    fontSize: 15,
-    fontWeight: '800',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   modeTitleActive: {
-    color: colors.teal,
+    color: colors.tealStrong,
   },
   modeDangerTitle: {
-    color: colors.danger,
+    color: colors.dangerStrong,
   },
   modeText: {
-    marginTop: 4,
+    marginTop: space.xs,
     color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
   warnBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: space.sm,
     backgroundColor: colors.dangerSoft,
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: radius.md,
+    padding: space.md,
   },
   warnText: {
     flex: 1,
-    color: colors.danger,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '600',
+    color: colors.dangerStrong,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
   confirmInput: {
-    height: 48,
-    borderRadius: 14,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.danger,
     backgroundColor: colors.bg,
-    paddingHorizontal: 14,
+    paddingHorizontal: space.md,
     color: colors.ink,
-    fontSize: 15,
+    ...type.body,
   },
   confirmHint: {
     color: colors.muted,
-    fontSize: 12,
-    lineHeight: 17,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
 });

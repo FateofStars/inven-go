@@ -7,16 +7,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useInventory } from '@/context/InventoryContext';
 import { formatTimestamp } from '@/lib/format';
 import { type LogEntry, type LogType } from '@/lib/types';
-import { colors, shadow } from '@/theme';
+import { colors, elevation, press, radius, size, space, textScale, type, weight } from '@/theme';
 
-const tone: Record<LogType, { color: string; soft: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
-  inbound: { color: colors.teal, soft: colors.tealSoft, icon: 'tray-arrow-down' },
-  outbound: { color: colors.clay, soft: colors.claySoft, icon: 'tray-arrow-up' },
-  create: { color: colors.navy, soft: colors.navySoft, icon: 'plus-box-outline' },
-  delete: { color: colors.danger, soft: colors.dangerSoft, icon: 'trash-can-outline' },
-  import: { color: colors.navy, soft: colors.navySoft, icon: 'database-import-outline' },
-  export: { color: colors.warning, soft: colors.warningSoft, icon: 'database-export-outline' },
-  barcode: { color: colors.green, soft: colors.greenSoft, icon: 'barcode' },
+/**
+ * 日志类型配色：`color` 给图标，`text` 给浅底上的标签文字（深档保证 4.5:1），`soft` 给图标底块。
+ */
+const tone: Record<
+  LogType,
+  { color: string; text: string; soft: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }
+> = {
+  inbound: { color: colors.teal, text: colors.tealStrong, soft: colors.tealSoft, icon: 'tray-arrow-down' },
+  outbound: { color: colors.clay, text: colors.clayStrong, soft: colors.claySoft, icon: 'tray-arrow-up' },
+  create: { color: colors.navy, text: colors.navyStrong, soft: colors.navySoft, icon: 'plus-box-outline' },
+  delete: { color: colors.danger, text: colors.dangerStrong, soft: colors.dangerSoft, icon: 'trash-can-outline' },
+  import: { color: colors.navy, text: colors.navyStrong, soft: colors.navySoft, icon: 'database-import-outline' },
+  export: { color: colors.warning, text: colors.warningStrong, soft: colors.warningSoft, icon: 'database-export-outline' },
+  barcode: { color: colors.green, text: colors.greenStrong, soft: colors.greenSoft, icon: 'barcode' },
 };
 
 type TimeRange = 'all' | 'today' | 'week' | 'month';
@@ -104,7 +110,7 @@ export default function LogsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
         {searchOpen ? (
           <>
             <View style={styles.searchBox}>
@@ -115,19 +121,24 @@ export default function LogsScreen() {
                 placeholder="输入商品名称搜索"
                 placeholderTextColor={colors.muted}
                 style={styles.searchInput}
+                maxFontSizeMultiplier={textScale.body}
                 autoFocus
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="search"
               />
               {query.length > 0 ? (
-                <Pressable hitSlop={10} onPress={() => setQuery('')} accessibilityLabel="清空搜索">
+                <Pressable
+                  style={styles.searchClear}
+                  onPress={() => setQuery('')}
+                  accessibilityLabel="清空搜索"
+                >
                   <MaterialCommunityIcons name="close-circle" size={18} color={colors.muted} />
                 </Pressable>
               ) : null}
             </View>
-            <Pressable style={styles.cancel} onPress={closeSearch} hitSlop={8}>
-              <Text style={styles.cancelText}>取消</Text>
+            <Pressable style={styles.cancel} onPress={closeSearch} hitSlop={space.md}>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.cancelText}>取消</Text>
             </Pressable>
           </>
         ) : (
@@ -139,8 +150,10 @@ export default function LogsScreen() {
                 onPress={scrollToTop}
                 accessibilityLabel="回到顶部"
               >
-                <Text style={styles.title}>日志</Text>
-                <Text style={styles.subtitle}>
+                <Text style={styles.title} maxFontSizeMultiplier={textScale.title}>
+                  日志
+                </Text>
+                <Text maxFontSizeMultiplier={textScale.body} style={styles.subtitle}>
                   {filtering ? `筛选出 ${visible.length} / ${logs.length} 条` : `共 ${logs.length} 条记录`}
                 </Text>
               </Pressable>
@@ -159,10 +172,10 @@ export default function LogsScreen() {
       {searchOpen ? (
         <View style={styles.panel}>
           <View style={styles.panelHead}>
-            <Text style={styles.panelTitle}>操作类型</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.panelTitle}>操作类型</Text>
             {filtering ? (
-              <Pressable hitSlop={8} onPress={reset}>
-                <Text style={styles.reset}>重置筛选</Text>
+              <Pressable hitSlop={space.lg} onPress={reset}>
+                <Text maxFontSizeMultiplier={textScale.body} style={styles.reset}>重置筛选</Text>
               </Pressable>
             ) : null}
           </View>
@@ -179,7 +192,7 @@ export default function LogsScreen() {
             </View>
           </ScrollView>
 
-          <Text style={[styles.panelTitle, styles.panelTitleSpaced]}>操作时间</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={[styles.panelTitle, styles.panelTitleSpaced]}>操作时间</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={styles.chipRow}>
               {timeOptions.map((option) => (
@@ -205,18 +218,22 @@ export default function LogsScreen() {
         ListEmptyComponent={
           filtering ? (
             <View style={styles.empty}>
-              <MaterialCommunityIcons name="filter-remove-outline" size={42} color={colors.muted} />
-              <Text style={styles.emptyTitle}>没有符合条件的日志</Text>
-              <Text style={styles.emptyText}>换个操作类型或时间范围试试，也可以清空搜索关键词。</Text>
+              <MaterialCommunityIcons name="filter-remove-outline" size={size.emptyIcon} color={colors.muted} />
+              <Text style={styles.emptyTitle} maxFontSizeMultiplier={textScale.title}>
+                没有符合条件的日志
+              </Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyText}>换个操作类型或时间范围试试，也可以清空搜索关键词。</Text>
               <Pressable style={styles.emptyAction} onPress={reset}>
-                <Text style={styles.emptyActionText}>清空筛选条件</Text>
+                <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyActionText}>清空筛选条件</Text>
               </Pressable>
             </View>
           ) : (
             <View style={styles.empty}>
-              <MaterialCommunityIcons name="clipboard-text-clock-outline" size={42} color={colors.muted} />
-              <Text style={styles.emptyTitle}>还没有操作记录</Text>
-              <Text style={styles.emptyText}>入库、出库、新增、删除、条码更新以及导入导出会出现在这里。</Text>
+              <MaterialCommunityIcons name="clipboard-text-clock-outline" size={size.emptyIcon} color={colors.muted} />
+              <Text style={styles.emptyTitle} maxFontSizeMultiplier={textScale.title}>
+                还没有操作记录
+              </Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyText}>入库、出库、新增、删除、条码更新以及导入导出会出现在这里。</Text>
             </View>
           )
         }
@@ -234,7 +251,7 @@ function FilterChip({ label, active, onPress }: { label: string; active: boolean
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
     >
-      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+      <Text maxFontSizeMultiplier={textScale.body} style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
     </Pressable>
   );
 }
@@ -248,10 +265,10 @@ function LogRow({ entry }: { entry: LogEntry }) {
       </View>
       <View style={styles.body}>
         <View style={styles.rowHead}>
-          <Text style={[styles.badge, { color: palette.color }]}>{typeLabel(entry.type)}</Text>
-          <Text style={styles.time}>{formatTimestamp(entry.timestamp)}</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={[styles.badge, { color: palette.text }]}>{typeLabel(entry.type)}</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.time}>{formatTimestamp(entry.timestamp)}</Text>
         </View>
-        <Text style={styles.detail}>{entry.detail}</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.detail}>{entry.detail}</Text>
       </View>
     </View>
   );
@@ -266,13 +283,13 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.bg,
-    paddingHorizontal: 16,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingBottom: 12,
+    gap: space.md,
+    paddingHorizontal: space.lg,
+    paddingBottom: space.md,
   },
   titleWrap: {
     flex: 1,
@@ -282,64 +299,69 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   title: {
+    ...type.display,
     color: colors.ink,
-    fontSize: 24,
-    fontWeight: '800',
+    fontWeight: weight.bold,
   },
   subtitle: {
-    marginTop: 3,
+    marginTop: space.xs,
+    ...type.caption,
     color: colors.muted,
-    fontSize: 13,
-    fontWeight: '600',
+    fontWeight: weight.regular,
   },
   searchButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 15,
+    width: size.touch,
+    height: size.touch,
+    borderRadius: radius.md,
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadow,
+    ...elevation.card,
   },
   searchBox: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    height: 44,
-    borderRadius: 15,
+    gap: space.sm,
+    height: size.touch,
+    borderRadius: radius.md,
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 12,
+    paddingHorizontal: space.md,
+    ...elevation.card,
   },
   searchInput: {
     flex: 1,
     padding: 0,
     color: colors.ink,
-    fontSize: 15,
+    ...type.body,
+  },
+  /** 清空键做成 44×44 热区，视觉上仍贴着输入框右侧内边距。 */
+  searchClear: {
+    width: size.touch,
+    height: size.touch,
+    marginRight: -space.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cancel: {
-    paddingHorizontal: 2,
+    paddingHorizontal: space.xs,
   },
   cancelText: {
-    color: colors.navy,
-    fontSize: 15,
-    fontWeight: '700',
+    color: colors.tealStrong,
+    ...type.body,
+    fontWeight: weight.bold,
   },
   pressed: {
-    opacity: 0.75,
+    opacity: press.opacity,
   },
   panel: {
     backgroundColor: colors.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 12,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+    marginHorizontal: space.lg,
+    marginBottom: space.md,
+    ...elevation.card,
   },
   panelHead: {
     flexDirection: 'row',
@@ -348,122 +370,123 @@ const styles = StyleSheet.create({
   },
   panelTitle: {
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: '800',
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   panelTitleSpaced: {
-    marginTop: 14,
+    marginTop: space.lg,
   },
   reset: {
-    color: colors.navy,
-    fontSize: 13,
-    fontWeight: '700',
+    color: colors.tealStrong,
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   chipRow: {
     flexDirection: 'row',
-    gap: 8,
-    paddingTop: 10,
-    paddingRight: 4,
+    gap: space.sm,
+    paddingTop: space.md,
+    paddingRight: space.xs,
   },
   chip: {
-    height: 36,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.line,
+    height: size.touch,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
     backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   chipActive: {
-    borderColor: colors.teal,
     backgroundColor: colors.tealSoft,
   },
   chipText: {
     color: colors.muted,
-    fontSize: 13,
-    fontWeight: '700',
+    ...type.bodyTight,
+    fontWeight: weight.regular,
   },
   chipTextActive: {
-    color: colors.teal,
+    color: colors.tealStrong,
+    fontWeight: weight.bold,
   },
   list: {
     flex: 1,
   },
   content: {
-    gap: 10,
+    // 页边距交给内容区：列表本身铺满全宽，滚动条才会贴屏幕右缘，与库存管理页一致。
+    paddingHorizontal: space.lg,
+    gap: space.sm,
     flexGrow: 1,
-    paddingBottom: 24,
+    paddingBottom: space.xl,
   },
   row: {
     flexDirection: 'row',
-    gap: 12,
+    gap: space.md,
     backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderRadius: radius.lg,
+    padding: space.lg,
+    ...elevation.card,
   },
   iconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: size.iconTile,
+    height: size.iconTile,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   body: {
     flex: 1,
-    gap: 6,
+    gap: space.xs,
   },
   rowHead: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    gap: space.sm,
   },
   badge: {
-    fontSize: 14,
-    fontWeight: '800',
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   time: {
     color: colors.muted,
-    fontSize: 12,
+    ...type.caption,
+    fontWeight: weight.regular,
     fontVariant: ['tabular-nums'],
   },
   detail: {
     color: colors.ink,
-    fontSize: 14,
-    lineHeight: 20,
+    ...type.body,
+    fontWeight: weight.regular,
   },
   empty: {
-    marginTop: 56,
+    marginTop: space.xxl,
     alignItems: 'center',
-    paddingHorizontal: 28,
-    gap: 8,
+    paddingHorizontal: space.xl,
+    gap: space.sm,
   },
   emptyTitle: {
     color: colors.ink,
-    fontSize: 18,
-    fontWeight: '800',
+    ...type.title,
+    fontWeight: weight.bold,
   },
   emptyText: {
     color: colors.muted,
-    fontSize: 14,
-    lineHeight: 21,
+    ...type.body,
+    fontWeight: weight.regular,
     textAlign: 'center',
   },
   emptyAction: {
-    marginTop: 8,
-    height: 42,
-    paddingHorizontal: 18,
-    borderRadius: 14,
+    marginTop: space.sm,
+    minHeight: size.touch,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.md,
     backgroundColor: colors.navySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyActionText: {
-    color: colors.navy,
-    fontSize: 14,
-    fontWeight: '800',
+    color: colors.navyStrong,
+    ...type.body,
+    fontWeight: weight.bold,
   },
 });

@@ -4,14 +4,14 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { QuantityStepper } from '@/components/QuantityStepper';
 import { SheetModal } from '@/components/SheetModal';
 import type { Product } from '@/lib/types';
-import { colors } from '@/theme';
+import { colors, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 /**
  * 搜索结果列表的固定高度。
  * 不用 maxHeight：列表随匹配数量变高变矮会带着上方的输入框上下移动，
  * 键盘弹出时输入框会被一起拖进键盘后面；固定高度让面板尺寸不受搜索结果影响。
  */
-const SEARCH_LIST_HEIGHT = 216;
+const SEARCH_LIST_HEIGHT = size.searchListHeight;
 
 export type ProductSelection = { type: 'new' } | { type: 'existing'; productId: string } | null;
 
@@ -70,15 +70,17 @@ export function AddProductModal({
   return (
     <SheetModal visible={visible} onRequestClose={onClose}>
       <View style={styles.handle} />
-      <Text style={styles.title}>添加商品</Text>
-      <Text style={styles.subtitle}>一个产品可以绑定多个不同条码。确认添加时按下方数量入库。</Text>
+      <Text style={styles.title} maxFontSizeMultiplier={textScale.title}>
+        添加商品
+      </Text>
+      <Text maxFontSizeMultiplier={textScale.body} style={styles.subtitle}>一个产品可以绑定多个不同条码。确认添加时按下方数量入库。</Text>
       <ScrollView
         ref={formRef}
         style={styles.formScroll}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.form}
       >
-        <Text style={styles.label}>条形码</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.label}>条形码</Text>
         <View style={styles.barcodeRow}>
           <TextInput
             value={barcode}
@@ -86,15 +88,16 @@ export function AddProductModal({
             placeholder="扫描或输入条码"
             placeholderTextColor={colors.muted}
             style={styles.input}
+            maxFontSizeMultiplier={textScale.body}
             autoCapitalize="none"
             autoCorrect={false}
           />
           <Pressable style={styles.rescan} onPress={onRescan}>
-            <Text style={styles.rescanText}>重新扫描</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.rescanText}>重新扫描</Text>
           </Pressable>
         </View>
 
-        <Text style={styles.label}>本次入库数量</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.label}>本次入库数量</Text>
         <QuantityStepper value={quantity} onChange={onChangeQuantity} />
 
         <View
@@ -102,7 +105,7 @@ export function AddProductModal({
             nameFieldY.current = event.nativeEvent.layout.y;
           }}
         >
-          <Text style={styles.label}>产品名称</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.label}>产品名称</Text>
           <TextInput
             value={query}
             onChangeText={(value) => {
@@ -117,6 +120,7 @@ export function AddProductModal({
             placeholder="搜索已有产品，或输入新品名称"
             placeholderTextColor={colors.muted}
             style={styles.input}
+            maxFontSizeMultiplier={textScale.body}
           />
         </View>
 
@@ -135,8 +139,8 @@ export function AddProductModal({
                 setListOpen(false);
               }}
             >
-              <Text style={styles.createTitle}>+ 新增产品</Text>
-              <Text style={styles.createHint}>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.createTitle}>+ 新增产品</Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.createHint}>
                 {query.trim()
                   ? filtered.length === 0
                     ? `没有匹配项，将使用「${query.trim()}」`
@@ -156,44 +160,45 @@ export function AddProductModal({
                     setListOpen(false);
                   }}
                 >
-                  <Text style={styles.optionTitle}>{product.name}</Text>
-                  <Text style={styles.optionMeta}>库存 {product.stock} · {product.barcodes.length} 个条码</Text>
+                  <Text maxFontSizeMultiplier={textScale.body} style={styles.optionTitle}>{product.name}</Text>
+                  <Text maxFontSizeMultiplier={textScale.body} style={styles.optionMeta}>库存 {product.stock} · {product.barcodes.length} 个条码</Text>
                 </Pressable>
               );
             })}
             {/* 没有匹配项时补一行说明，避免留下一个只有「+ 新增产品」的空白框。 */}
-            {filtered.length === 0 ? <Text style={styles.listEmpty}>没有找到已有产品，可直接新建。</Text> : null}
+            {filtered.length === 0 ? <Text maxFontSizeMultiplier={textScale.body} style={styles.listEmpty}>没有找到已有产品，可直接新建。</Text> : null}
           </ScrollView>
         ) : null}
 
         {selection?.type === 'new' ? (
           <View>
-            <Text style={styles.label}>新品类名称</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.label}>新品类名称</Text>
             <TextInput
               value={name}
               onChangeText={onChangeName}
               placeholder="确认新产品名称"
               placeholderTextColor={colors.muted}
               style={styles.input}
+              maxFontSizeMultiplier={textScale.body}
             />
           </View>
         ) : null}
 
         {selectedProduct ? (
           <View style={styles.bindBox}>
-            <Text style={styles.bindText}>将把条码绑定到「{selectedProduct.name}」，并入库 {quantity} 件。</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.bindText}>将把条码绑定到「{selectedProduct.name}」，并入库 {quantity} 件。</Text>
           </View>
         ) : null}
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text maxFontSizeMultiplier={textScale.body} style={styles.error}>{error}</Text> : null}
       </ScrollView>
 
       <View style={styles.actions}>
         <Pressable style={styles.cancel} onPress={onClose} disabled={submitting}>
-          <Text style={styles.cancelText}>取消</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.cancelText}>取消</Text>
         </Pressable>
         <Pressable style={[styles.save, submitting && styles.disabled]} onPress={onSubmit} disabled={submitting}>
-          <Text style={styles.saveText}>{submitting ? '保存中…' : '确认添加'}</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.saveText}>{submitting ? '保存中…' : '确认添加'}</Text>
         </Pressable>
       </View>
     </SheetModal>
@@ -203,160 +208,162 @@ export function AddProductModal({
 const styles = StyleSheet.create({
   handle: {
     alignSelf: 'center',
-    width: 42,
-    height: 4,
-    borderRadius: 2,
+    width: size.sheetHandle,
+    height: space.xs,
+    borderRadius: radius.pill,
     backgroundColor: colors.line,
-    marginBottom: 12,
+    marginBottom: space.md,
   },
   title: {
     color: colors.ink,
-    fontSize: 22,
-    fontWeight: '700',
+    ...type.heading,
+    fontWeight: weight.bold,
   },
   subtitle: {
-    marginTop: 6,
+    marginTop: space.sm,
     color: colors.muted,
-    fontSize: 13,
-    lineHeight: 19,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
   formScroll: {
     // 可用高度不够时优先压缩表单区（内部可滚动），保证底部「取消 / 确认添加」始终露出。
     flexShrink: 1,
   },
   form: {
-    paddingTop: 16,
-    paddingBottom: 8,
-    gap: 8,
+    paddingTop: space.lg,
+    paddingBottom: space.sm,
+    gap: space.sm,
   },
   label: {
-    marginTop: 8,
+    marginTop: space.sm,
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: '700',
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   barcodeRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: space.sm,
     alignItems: 'center',
   },
   input: {
     flex: 1,
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.line,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     backgroundColor: colors.bg,
-    paddingHorizontal: 14,
+    paddingHorizontal: space.md,
     color: colors.ink,
-    fontSize: 15,
+    ...type.body,
   },
   rescan: {
-    height: 48,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.md,
     backgroundColor: colors.navy,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rescanText: {
     color: colors.white,
-    fontSize: 13,
-    fontWeight: '700',
+    ...type.bodyTight,
+    fontWeight: weight.bold,
   },
   list: {
     height: SEARCH_LIST_HEIGHT,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.line,
+    borderRadius: radius.lg,
+    backgroundColor: colors.card,
     overflow: 'hidden',
   },
   option: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.line,
-    backgroundColor: colors.white,
+    backgroundColor: colors.card,
   },
   optionActive: {
     backgroundColor: colors.tealSoft,
   },
   createTitle: {
-    color: colors.teal,
-    fontSize: 15,
-    fontWeight: '800',
+    color: colors.tealStrong,
+    ...type.body,
+    fontWeight: weight.bold,
   },
   createHint: {
-    marginTop: 3,
+    marginTop: space.xs,
     color: colors.muted,
-    fontSize: 12,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
   optionTitle: {
     color: colors.ink,
-    fontSize: 15,
-    fontWeight: '700',
+    ...type.body,
+    fontWeight: weight.bold,
   },
   optionMeta: {
-    marginTop: 2,
+    marginTop: space.xs,
     color: colors.muted,
-    fontSize: 12,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
   listEmpty: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
     color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
   bindBox: {
-    marginTop: 8,
+    marginTop: space.sm,
     backgroundColor: colors.tealSoft,
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: radius.md,
+    padding: space.md,
   },
   bindText: {
-    color: colors.teal,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '600',
+    color: colors.tealStrong,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
   error: {
-    color: colors.danger,
-    fontSize: 13,
-    fontWeight: '600',
+    color: colors.dangerStrong,
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   actions: {
     flexDirection: 'row',
-    gap: 12,
-    paddingTop: 8,
+    gap: space.md,
+    paddingTop: space.sm,
   },
   cancel: {
     flex: 1,
-    height: 50,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.bg,
   },
   cancelText: {
     color: colors.ink,
-    fontSize: 16,
-    fontWeight: '700',
+    ...type.bodyLg,
+    fontWeight: weight.regular,
   },
   save: {
     flex: 1.4,
-    height: 50,
-    borderRadius: 16,
+    minHeight: size.control,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.teal,
   },
   saveText: {
     color: colors.white,
-    fontSize: 16,
-    fontWeight: '800',
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   disabled: {
-    opacity: 0.6,
+    opacity: state.disabled,
   },
 });

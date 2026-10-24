@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import logo from '../../logo/Invengo-logo.png';
 import { getAppVersion } from '@/constants/appInfo';
-import { colors } from '@/theme';
+import { colors, elevation, radius, size, space, textScale, type, weight } from '@/theme';
 
 /** 开发者个人主页，点击「开发者：yuan」时交给系统浏览器打开。 */
 const DEVELOPER_HOMEPAGE = 'https://blog.yuansever.top';
@@ -25,32 +25,34 @@ export default function AboutScreen() {
     <View style={styles.screen}>
       <View style={styles.hero}>
         <Image source={logo} style={styles.logo} resizeMode="contain" />
-        <Text style={styles.appName}>Inven Go.</Text>
-        <Text style={styles.version}>{getAppVersion()}</Text>
+        <Text style={styles.appName} maxFontSizeMultiplier={textScale.number}>
+          Inven Go.
+        </Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.version}>{getAppVersion()}</Text>
       </View>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 28 }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + space.xl }]}>
         <TouchableOpacity
           style={styles.pillButton}
           onPress={() => router.push('/changelog')}
           activeOpacity={0.5}
-          hitSlop={{ top: 8, bottom: 8, left: 20, right: 20 }}
+          hitSlop={{ top: space.sm, bottom: space.sm, left: space.lg, right: space.lg }}
           accessibilityRole="button"
           accessibilityLabel="更新日志"
         >
           <MaterialCommunityIcons name="history" size={16} color={colors.muted} />
-          <Text style={styles.pillText}>更新日志</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.pillText}>更新日志</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.pillButton}
           onPress={() => openLink(RELEASE_URL)}
           activeOpacity={0.5}
-          hitSlop={{ top: 8, bottom: 8, left: 20, right: 20 }}
+          hitSlop={{ top: space.sm, bottom: space.sm, left: space.lg, right: space.lg }}
           accessibilityRole="link"
           accessibilityLabel="获取最新发布"
         >
           <MaterialCommunityIcons name="github" size={16} color={colors.muted} />
-          <Text style={styles.pillText}>获取最新发布</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.pillText}>获取最新发布</Text>
         </TouchableOpacity>
         {/*
           用 TouchableOpacity 而不是 Pressable：activeOpacity 会以动画方式平滑过渡到
@@ -60,12 +62,12 @@ export default function AboutScreen() {
         <TouchableOpacity
           onPress={() => openLink(DEVELOPER_HOMEPAGE)}
           activeOpacity={0.5}
-          hitSlop={{ top: 12, bottom: 12, left: 20, right: 20 }}
+          hitSlop={{ top: space.md, bottom: space.md, left: space.lg, right: space.lg }}
           accessibilityRole="link"
         >
-          <Text style={styles.footerText}>开发者：yuan</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.footerText}>开发者：yuan</Text>
         </TouchableOpacity>
-        <Text style={styles.footerText}>特别鸣谢：{CREDITS}</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.footerText}>特别鸣谢：{CREDITS}</Text>
       </View>
     </View>
   );
@@ -80,54 +82,54 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: space.xxl,
   },
   logo: {
-    width: 156,
-    height: 156,
-    borderRadius: 36,
+    width: size.logo,
+    height: size.logo,
+    borderRadius: radius.xl,
   },
   appName: {
-    marginTop: 24,
+    marginTop: space.xl,
     color: colors.ink,
-    fontSize: 44,
-    fontWeight: '700',
+    ...type.numberLg,
+    fontWeight: weight.bold,
     fontFamily: Platform.select({ ios: 'Snell Roundhand', android: 'cursive' }),
   },
   version: {
-    marginTop: 10,
+    marginTop: space.sm,
     color: colors.muted,
-    fontSize: 14,
-    fontWeight: '600',
+    ...type.body,
+    fontWeight: weight.regular,
   },
   footer: {
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 24,
-    paddingTop: 16,
+    gap: space.sm,
+    paddingHorizontal: space.xl,
+    paddingTop: space.lg,
   },
   footerText: {
     color: colors.muted,
-    fontSize: 14,
-    lineHeight: 20,
+    ...type.body,
+    fontWeight: weight.regular,
     textAlign: 'center',
     fontFamily: Platform.select({ android: 'sans-serif' }),
   },
   pillButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    height: 36,
-    paddingHorizontal: 16,
-    borderRadius: 18,
+    gap: space.sm,
+    minHeight: size.controlSm,
+    paddingVertical: space.xs,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.pill,
     backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
+    ...elevation.card,
   },
   pillText: {
     color: colors.muted,
-    fontSize: 14,
-    fontWeight: '600',
+    ...type.body,
+    fontWeight: weight.regular,
     fontFamily: Platform.select({ android: 'sans-serif' }),
   },
 });

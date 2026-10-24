@@ -1,12 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
-import { colors, shadow } from '@/theme';
+import { colors, elevation, radius, size, space, textScale, type, weight } from '@/theme';
 
 type PillRowProps = {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  /** 图标与标题共用的主色。 */
+  /** 图标主色，取语义色的 `base` 档。 */
   color: string;
+  /** 标题字色，取同一色相的 `strong` 档以保证浅底上的对比度；不传则跟随图标色。 */
+  titleColor?: string;
   /** 图标底块的柔和底色。 */
   soft: string;
   title: string;
@@ -20,10 +22,11 @@ type PillRowProps = {
   switchValue?: boolean;
 };
 
-/** 设置页与数据库页共用的「图标 + 标题 + 说明」圆角卡片行。 */
+/** 设置页与数据库页共用的「图标 + 标题 + 说明」卡片行。 */
 export function PillRow({
   icon,
   color,
+  titleColor,
   soft,
   title,
   text,
@@ -44,11 +47,11 @@ export function PillRow({
       accessibilityState={withSwitch ? { checked: switchValue, disabled } : { disabled }}
     >
       <View style={[styles.pillIcon, compact && styles.pillIconCompact, { backgroundColor: soft }]}>
-        <MaterialCommunityIcons name={icon} size={compact ? 19 : 22} color={color} />
+        <MaterialCommunityIcons name={icon} size={compact ? 20 : 22} color={color} />
       </View>
       <View style={styles.pillBody}>
-        <Text style={[styles.pillTitle, compact && styles.pillTitleCompact, { color }]}>{title}</Text>
-        {text ? <Text style={styles.pillText}>{text}</Text> : null}
+        <Text maxFontSizeMultiplier={textScale.body} style={[styles.pillTitle, { color: titleColor ?? color }]}>{title}</Text>
+        {text ? <Text maxFontSizeMultiplier={textScale.body} style={styles.pillText}>{text}</Text> : null}
       </View>
       {busy ? (
         <ActivityIndicator color={color} />
@@ -67,7 +70,7 @@ export function PillRow({
           />
         </View>
       ) : (
-        <MaterialCommunityIcons name="chevron-right" size={compact ? 20 : 22} color={colors.muted} />
+        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.muted} />
       )}
     </Pressable>
   );
@@ -77,51 +80,43 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: space.md,
     backgroundColor: colors.card,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    ...shadow,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    ...elevation.card,
   },
   pillCompact: {
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    shadowOpacity: 0.04,
-    elevation: 1,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
   },
   pillPressed: {
     backgroundColor: colors.bg,
   },
   pillIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
+    width: size.iconTile,
+    height: size.iconTile,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pillIconCompact: {
-    width: 32,
-    height: 32,
-    borderRadius: 11,
+    width: size.iconTileSm,
+    height: size.iconTileSm,
+    borderRadius: radius.sm,
   },
   pillBody: {
     flex: 1,
-    gap: 4,
+    gap: space.xs,
   },
   pillTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  pillTitleCompact: {
-    fontSize: 15,
+    ...type.bodyLg,
+    fontWeight: weight.bold,
   },
   pillText: {
     color: colors.muted,
-    fontSize: 13,
-    lineHeight: 18,
+    ...type.caption,
+    fontWeight: weight.regular,
   },
 });
