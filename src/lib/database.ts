@@ -1,3 +1,4 @@
+import { cleanBarcode } from '@/lib/barcodeFormat';
 import type { InventoryDatabase, LogEntry, LogType, Product } from '@/lib/types';
 
 export const STORAGE_KEY = 'inventory.database.v1';
@@ -50,7 +51,7 @@ function readProduct(value: unknown): Product | null {
     ? uniqueStrings(
         record.barcodes
           .filter((code): code is string => typeof code === 'string')
-          .map((code) => code.trim())
+          .map((code) => cleanBarcode(code))
           .filter((code) => code.length > 0),
       )
     : [];
@@ -112,7 +113,7 @@ export function trimLogs(logs: LogEntry[]): LogEntry[] {
 }
 
 export function findProductByBarcode(products: Product[], barcode: string): Product | undefined {
-  const normalized = barcode.trim();
+  const normalized = cleanBarcode(barcode);
   return products.find((product) => product.barcodes.includes(normalized));
 }
 

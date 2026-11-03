@@ -1,8 +1,9 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { formatBarcode } from '@/lib/barcodeFormat';
 import { colors, elevation, radius, size, space, textScale, type, weight } from '@/theme';
 
 type BarcodeReplaceSheetProps = {
@@ -50,7 +51,7 @@ export function BarcodeReplaceSheet({ previous, next, onCancel, onConfirm }: Bar
         <Text maxFontSizeMultiplier={textScale.body} style={styles.label}>旧条形码</Text>
         <View style={styles.codeBox}>
           <Text maxFontSizeMultiplier={textScale.body} selectable={false} style={styles.codeText}>
-            {previous}
+            {formatBarcode(previous)}
           </Text>
         </View>
 
@@ -62,7 +63,7 @@ export function BarcodeReplaceSheet({ previous, next, onCancel, onConfirm }: Bar
         <Text maxFontSizeMultiplier={textScale.body} style={styles.label}>新条形码</Text>
         <View style={[styles.codeBox, styles.codeBoxNew]}>
           <Text maxFontSizeMultiplier={textScale.body} selectable={false} style={[styles.codeText, styles.codeTextNew]}>
-            {next}
+            {formatBarcode(next)}
           </Text>
         </View>
 
@@ -106,7 +107,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    ...type.heading,
+    ...type.display,
     fontWeight: weight.bold,
   },
   label: {
@@ -128,7 +129,9 @@ const styles = StyleSheet.create({
   codeText: {
     color: colors.ink,
     ...type.body,
+    fontFamily: Platform.OS === 'android' ? 'monospace' : 'Menlo',
     fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
   },
   codeTextNew: {
     color: colors.greenStrong,
@@ -162,7 +165,7 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     color: colors.ink,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.regular,
   },
   confirm: {
@@ -177,7 +180,7 @@ const styles = StyleSheet.create({
   },
   confirmText: {
     color: colors.white,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
 });

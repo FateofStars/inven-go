@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { QuantityStepper } from '@/components/QuantityStepper';
 import { SheetModal } from '@/components/SheetModal';
+import { editBarcode, formatBarcode } from '@/lib/barcodeFormat';
 import type { Product } from '@/lib/types';
 import { colors, radius, size, space, state, textScale, type, weight } from '@/theme';
 
@@ -83,11 +84,11 @@ export function AddProductModal({
         <Text maxFontSizeMultiplier={textScale.body} style={styles.label}>条形码</Text>
         <View style={styles.barcodeRow}>
           <TextInput
-            value={barcode}
-            onChangeText={onChangeBarcode}
+            value={formatBarcode(barcode)}
+            onChangeText={(value) => onChangeBarcode(editBarcode(barcode, value))}
             placeholder="扫描或输入条码"
             placeholderTextColor={colors.muted}
-            style={styles.input}
+            style={[styles.input, styles.barcodeInput]}
             maxFontSizeMultiplier={textScale.body}
             autoCapitalize="none"
             autoCorrect={false}
@@ -216,7 +217,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    ...type.heading,
+    ...type.display,
     fontWeight: weight.bold,
   },
   subtitle: {
@@ -255,6 +256,12 @@ const styles = StyleSheet.create({
     color: colors.ink,
     ...type.body,
   },
+  /** 条码输入：等宽字体让分段后的数字块彼此对齐，便于和实物包装逐块核对。 */
+  barcodeInput: {
+    fontFamily: Platform.OS === 'android' ? 'monospace' : 'Menlo',
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
+  },
   rescan: {
     minHeight: size.control,
     paddingVertical: space.sm,
@@ -266,7 +273,7 @@ const styles = StyleSheet.create({
   },
   rescanText: {
     color: colors.white,
-    ...type.bodyTight,
+    ...type.body,
     fontWeight: weight.bold,
   },
   list: {
@@ -346,7 +353,7 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     color: colors.ink,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.regular,
   },
   save: {
@@ -360,7 +367,7 @@ const styles = StyleSheet.create({
   },
   saveText: {
     color: colors.white,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
   disabled: {

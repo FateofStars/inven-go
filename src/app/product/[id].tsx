@@ -10,6 +10,7 @@ import { CenterCard } from '@/components/CenterCard';
 import { QuantityStepper } from '@/components/QuantityStepper';
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
 import { useInventory, type BarcodeOpResult } from '@/context/InventoryContext';
+import { formatBarcode } from '@/lib/barcodeFormat';
 import { formatTimestamp } from '@/lib/format';
 import { colors, elevation, press, radius, size, space, state, textScale, type, weight } from '@/theme';
 
@@ -150,17 +151,17 @@ export default function ProductScreen() {
     if (!target) return;
     if (target.mode === 'add') {
       const failure = barcodeFailure(await addBarcode(product.id, code));
-      showToast(failure ?? `已新增绑定条码 ${code}`, failure ? 'warning' : 'success');
+      showToast(failure ?? `已新增绑定条码 ${formatBarcode(code)}`, failure ? 'warning' : 'success');
       return;
     }
     const failure = barcodeFailure(await replaceBarcode(product.id, target.barcode, code));
-    showToast(failure ?? `条码已更新为 ${code}`, failure ? 'warning' : 'success');
+    showToast(failure ?? `条码已更新为 ${formatBarcode(code)}`, failure ? 'warning' : 'success');
   };
 
   const removeTargetBarcode = async (code: string) => {
     const failure = barcodeFailure(await removeBarcode(product.id, code));
     // 删除属于破坏性操作，成功也用黄色警示色，比成功绿更贴切。
-    showToast(failure ?? `已删除条码 ${code}`, 'warning');
+    showToast(failure ?? `已删除条码 ${formatBarcode(code)}`, 'warning');
   };
 
   return (
@@ -218,25 +219,34 @@ export default function ProductScreen() {
             adjustPanelY.current = event.nativeEvent.layout.y;
           }}
         >
-          <Text maxFontSizeMultiplier={textScale.body} style={styles.panelTitle}>调整库存</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.panelTitle}>快速调整</Text>
           {/* 数量与提交合为一组：数量保持 1 时就是原来的快捷 ±1，输入更大数值则一次增减多件。 */}
           <QuantityStepper value={amount} onChange={setAmount} min={0} />
           <View style={styles.quickRow}>
+            {/* 数量为 0 时两个方向都没有实际变动：按灰色不可用态呈现，但保留点击以说明原因。 */}
             <Pressable
-              style={({ pressed }) => [styles.minus, pending && styles.disabled, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.minus,
+                (pending || amount <= 0) && styles.disabled,
+                pressed && styles.pressed,
+              ]}
               onPress={() => applyTyped(-1)}
               disabled={pending}
               accessibilityLabel={`减少 ${amount} 件`}
-              accessibilityState={{ disabled: pending }}
+              accessibilityState={{ disabled: pending || amount <= 0 }}
             >
               <Text maxFontSizeMultiplier={textScale.body} style={styles.minusText}>减少</Text>
             </Pressable>
             <Pressable
-              style={({ pressed }) => [styles.plus, pending && styles.disabled, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.plus,
+                (pending || amount <= 0) && styles.disabled,
+                pressed && styles.pressed,
+              ]}
               onPress={() => applyTyped(1)}
               disabled={pending}
               accessibilityLabel={`增加 ${amount} 件`}
-              accessibilityState={{ disabled: pending }}
+              accessibilityState={{ disabled: pending || amount <= 0 }}
             >
               <Text maxFontSizeMultiplier={textScale.body} style={styles.plusText}>增加</Text>
             </Pressable>
@@ -282,10 +292,12 @@ export default function ProductScreen() {
                       <Text maxFontSizeMultiplier={textScale.body} style={[styles.actionText, styles.actionTextEdit]}>修改</Text>
                     </Pressable>
                     <Pressable
+                      // 不可用统一走「保留原配色 + 整体降低不透明度」，与数据库管理的删除按钮一致。
                       style={({ pressed }) => [
                         styles.action,
-                        onlyOne ? styles.actionDisabled : styles.actionRemove,
+                        styles.actionRemove,
                         pressed && styles.pressed,
+                        onlyOne && styles.actionDisabled,
                       ]}
                       accessibilityLabel={`删除条码 ${code}`}
                       accessibilityState={{ disabled: onlyOne }}
@@ -298,12 +310,8 @@ export default function ProductScreen() {
                         setConfirmRemove(code);
                       }}
                     >
-                      <MaterialCommunityIcons
-                        name="trash-can-outline"
-                        size={20}
-                        color={onlyOne ? colors.muted : colors.danger}
-                      />
-                      <Text maxFontSizeMultiplier={textScale.body} style={[styles.actionText, onlyOne ? styles.actionTextDisabled : styles.actionTextRemove]}>
+                      <MaterialCommunityIcons name="trash-can-outline" size={20} color={colors.danger} />
+                      <Text maxFontSizeMultiplier={textScale.body} style={[styles.actionText, styles.actionTextRemove]}>
                         删除
                       </Text>
                     </Pressable>
@@ -313,7 +321,7 @@ export default function ProductScreen() {
                 <View style={styles.barcodeRow}>
                   {/* 禁止文本选中，否则安卓长按会弹出蓝色选择框，干扰左滑手势。 */}
                   <Text maxFontSizeMultiplier={textScale.body} selectable={false} style={styles.barcodeText}>
-                    {code}
+                    {formatBarcode(code)}
                   </Text>
                 </View>
               </Swipeable>
@@ -335,7 +343,7 @@ export default function ProductScreen() {
             hint={
               scanTarget.mode === 'add'
                 ? `扫描或输入要绑定到「${product.name}」的新条码`
-                : `扫描或输入替换 ${scanTarget.barcode} 的新条码`
+                : `扫描或输入替换 ${formatBarcode(scanTarget.barcode)} 的新条码`
             }
             replaceFrom={scanTarget.mode === 'edit' ? scanTarget.barcode : undefined}
             onCancel={() => setScanTarget(null)}
@@ -346,7 +354,7 @@ export default function ProductScreen() {
         <CenterCard
           visible={confirmRemove !== null}
           title="确定要删除该条形码吗？"
-          description={`删除后「${product.name}」将不再识别条码 ${confirmRemove ?? ''}，该操作会写入条码更新日志。`}
+          description={`删除后「${product.name}」将不再识别条码 ${formatBarcode(confirmRemove ?? '')}，该操作会写入条码更新日志。`}
           confirmLabel="确认删除"
           confirmTone="danger"
           onCancel={() => setConfirmRemove(null)}
@@ -488,8 +496,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   panelTitle: {
-    color: colors.ink,
-    ...type.bodyLg,
+    color: colors.muted,
+    ...type.caption,
     fontWeight: weight.bold,
   },
   /** 绑定条码的「新增」：与二级界面头部按钮共用紧凑行动样式（32 + 16 图标）。 */
@@ -516,7 +524,7 @@ const styles = StyleSheet.create({
   },
   minusText: {
     color: colors.clayStrong,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
   plus: {
@@ -530,7 +538,7 @@ const styles = StyleSheet.create({
   },
   plusText: {
     color: colors.greenStrong,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
   /** 统一按压反馈。 */
@@ -552,7 +560,9 @@ const styles = StyleSheet.create({
   barcodeText: {
     color: colors.ink,
     ...type.body,
+    fontFamily: Platform.OS === 'android' ? 'monospace' : 'Menlo',
     fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
   },
   swipeActions: {
     flexDirection: 'row',
@@ -576,7 +586,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dangerSoft,
   },
   actionDisabled: {
-    backgroundColor: colors.bg,
+    opacity: state.disabled,
   },
   actionText: {
     ...type.caption,
@@ -587,9 +597,6 @@ const styles = StyleSheet.create({
   },
   actionTextRemove: {
     color: colors.dangerStrong,
-  },
-  actionTextDisabled: {
-    color: colors.muted,
   },
   barcodeEmpty: {
     color: colors.muted,
@@ -611,7 +618,7 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     color: colors.dangerStrong,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
   missing: {
@@ -638,7 +645,7 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     color: colors.white,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
 });

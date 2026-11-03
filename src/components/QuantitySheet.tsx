@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    ...type.heading,
+    ...type.display,
     fontWeight: weight.bold,
   },
   name: {
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     color: colors.ink,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.regular,
   },
   confirm: {
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
   },
   confirmText: {
     color: colors.white,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
   disabled: {

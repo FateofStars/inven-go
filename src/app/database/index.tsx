@@ -18,6 +18,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CenterCard } from '@/components/CenterCard';
+import EmptyState from '@/components/EmptyState';
 import { PillRow } from '@/components/PillRow';
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
 import { useInventory } from '@/context/InventoryContext';
@@ -310,6 +311,10 @@ export default function DatabaseScreen() {
       setTextOpen(false);
       return;
     }
+    // 先关掉来源弹窗再进确认弹窗：否则「粘贴备份数据」会一直留在确认弹窗下面，
+    // 确认导入后只关掉确认弹窗，源弹窗仍会停在屏幕上。
+    setImportOpen(false);
+    setTextOpen(false);
     setPending({ source, raw, productCount: data.products.length, logCount: data.logs.length });
   };
 
@@ -699,7 +704,7 @@ export default function DatabaseScreen() {
       <CenterCard
         visible={exportOpen}
         title="导出数据库"
-        description="两种通道都会先写入导出日志，并在该数据库名下保留一份快照（最多 5 份）。"
+        description="导出数据库，并在该数据库下保留一份快照（最多 5 份）。"
         cancelLabel="关闭"
         showConfirm={false}
         showScrollIndicator
@@ -746,7 +751,9 @@ export default function DatabaseScreen() {
             onPress={() => void handleCopyExport()}
           />
         </View>
-        <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>该库当前有 {snapshots.length} 份本机快照，导入时可直接还原。</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>
+          {`该库有 ${snapshots.length} 份快照，可在导入页面一键还原。`}
+        </Text>
       </CenterCard>
 
       <CenterCard
@@ -755,12 +762,14 @@ export default function DatabaseScreen() {
         description={
           importPurpose === 'preload'
             ? '选择一个通道读取备份，解析成功后填充到新建库。'
-            : '选择恢复通道，读取成功后再确认导入方式。'
+            : '选择恢复方式来恢复数据库。'
         }
         cancelLabel="关闭"
         showConfirm={false}
         showScrollIndicator
         cardMaxHeight="88%"
+        // 内容区还要容纳快照空态：按钮行收紧一档，给滚动区多留出一行文字的高度。
+        actionsSpacing={space.md}
         header={target ? <DatabaseBanner name={target.name} /> : null}
         onCancel={closeTarget}
         onConfirm={closeTarget}
@@ -783,7 +792,7 @@ export default function DatabaseScreen() {
             color={colors.teal}
             titleColor={colors.tealStrong}
             soft={colors.tealSoft}
-            title="从手机文件选取导入"
+            title="从手机文件导入"
             text="调起系统文件管理器选择 JSON"
             busy={busy === 'import'}
             disabled={busy !== null}
@@ -792,37 +801,44 @@ export default function DatabaseScreen() {
         </View>
 
         {/* 预导入是为尚未创建的新库准备的，没有本机快照可言，这里不展示快照区。 */}
-        {importPurpose === 'preload' ? null : (
+        {importPurpose === 'preload' ? null : snapshotsLoading ? (
           <>
             <Text maxFontSizeMultiplier={textScale.body} style={styles.sectionTitle}>历史备份快照</Text>
-            {snapshotsLoading ? (
-              <View style={styles.snapshotLoading}>
-                <ActivityIndicator color={colors.navy} />
-              </View>
-            ) : snapshots.length === 0 ? (
-              <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>该数据库还没有本机快照。每次成功导出都会自动生成一份。</Text>
-            ) : (
-              <View style={styles.rows}>
-                {snapshots.map((snapshot) => (
-                  <PillRow
-                    key={snapshot.name}
-                    compact
-                    icon="history"
-                    color={colors.clay}
-                    titleColor={colors.clayStrong}
-                    soft={colors.claySoft}
-                    title={formatTimestamp(snapshot.createdAt)}
-                    text={
-                      snapshot.includeLogs
-                        ? `${snapshot.productCount} 个商品 · ${snapshot.logCount} 条日志`
-                        : `${snapshot.productCount} 个商品 · 不含日志`
-                    }
-                    disabled={busy !== null}
-                    onPress={() => void handlePickSnapshot(snapshot)}
-                  />
-                ))}
-              </View>
-            )}
+            <View style={styles.snapshotLoading}>
+              <ActivityIndicator color={colors.navy} />
+            </View>
+          </>
+        ) : snapshots.length === 0 ? (
+          // 一份快照都没有时不再重复「历史备份快照」标题，由空态标题承担。
+          <EmptyState
+            compact
+            icon="cloud-clock-outline"
+            title="暂无本地历史快照"
+            description="在导出数据库时，系统会自动在此为您留存一份快照备份。"
+          />
+        ) : (
+          <>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.sectionTitle}>历史备份快照</Text>
+            <View style={styles.rows}>
+              {snapshots.map((snapshot) => (
+                <PillRow
+                  key={snapshot.name}
+                  compact
+                  icon="history"
+                  color={colors.clay}
+                  titleColor={colors.clayStrong}
+                  soft={colors.claySoft}
+                  title={formatTimestamp(snapshot.createdAt)}
+                  text={
+                    snapshot.includeLogs
+                      ? `${snapshot.productCount} 个商品 · ${snapshot.logCount} 条日志`
+                      : `${snapshot.productCount} 个商品 · 不含日志`
+                  }
+                  disabled={busy !== null}
+                  onPress={() => void handlePickSnapshot(snapshot)}
+                />
+              ))}
+            </View>
           </>
         )}
       </CenterCard>
@@ -876,6 +892,7 @@ export default function DatabaseScreen() {
         onCancel={closeTarget}
         onConfirm={() => void handleConfirmImport()}
       >
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.modeHint}>请选择操作方式：</Text>
         <View style={styles.modes}>
           <Pressable
             style={[styles.mode, importMode === 'merge' && styles.modeActive]}
@@ -1078,7 +1095,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: colors.ink,
-    ...type.heading,
+    ...type.display,
     fontWeight: weight.bold,
   },
   /** 二级界面头部按钮：紧凑行动按钮（32 + 16 图标）。 */
@@ -1147,7 +1164,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     flexShrink: 1,
-    ...type.bodyLg,
+    ...type.title,
     fontWeight: weight.bold,
   },
   cardText: {
@@ -1279,7 +1296,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   preloadTitle: {
-    ...type.bodyLg,
+    ...type.title,
     fontWeight: weight.bold,
   },
   errorRow: {
@@ -1336,6 +1353,14 @@ const styles = StyleSheet.create({
     ...type.caption,
     fontWeight: weight.bold,
   },
+  /** 确认导入弹窗里引导选择合并/覆盖的提示行。 */
+  modeHint: {
+    // 与上方「当前操作数据库」提示条拉开一档：12（内容区统一上边距）+ 4 = 16。
+    marginTop: space.xs,
+    color: colors.muted,
+    ...type.caption,
+    fontWeight: weight.bold,
+  },
   modes: {
     gap: space.sm,
   },
@@ -1352,7 +1377,7 @@ const styles = StyleSheet.create({
   },
   modeTitle: {
     color: colors.ink,
-    ...type.bodyLg,
+    ...type.title,
     fontWeight: weight.bold,
   },
   modeTitleActive: {

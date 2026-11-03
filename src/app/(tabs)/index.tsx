@@ -17,10 +17,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import EmptyState from '@/components/EmptyState';
+import HandDrawnArrow from '@/components/HandDrawnArrow';
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
 import { useInventory } from '@/context/InventoryContext';
 import type { Product } from '@/lib/types';
-import { colors, elevation, press, radius, size, space, textScale, type, weight } from '@/theme';
+import { colors, elevation, press, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 /**
  * 首页三个扫描入口各自保留一种识别色，颜色只出现在图标底块与标签上。
@@ -45,6 +47,12 @@ const CARD_GAP = space.md;
 const LIST_PADDING = space.lg;
 /** 卡片高度量不出来时的兜底值，只为让几何计算不至于失效。 */
 const FALLBACK_CARD_HEIGHT = 160;
+
+/** 手绘箭头的显示尺寸，以及箭尖/尾端在图内的位置（用于对准按钮与提示文字）。 */
+const ARROW_WIDTH = 80;
+const ARROW_HEIGHT = 69;
+const ARROW_TIP_X = 16;
+const ARROW_TAIL_Y = 6;
 
 type ToastState = { message: string; tone: ToastTone };
 
@@ -97,6 +105,8 @@ export default function InventoryScreen() {
   const [actionBarHeight, setActionBarHeight] = useState(ACTION_BAR_HEIGHT);
   // 取整避免两列宽度之和与容器差出亚像素，导致 flexWrap 意外换行。
   const cardWidth = Math.floor((width - LIST_PADDING * 2 - CARD_GAP) / 2);
+  // 引导区整体右移，让文字左缘与箭头图片左缘对齐，同时箭尖仍落在第一个按钮中心。
+  const calloutOffset = Math.max(0, (width - LIST_PADDING * 2) / 6 - ARROW_TIP_X);
 
   const rootRef = useRef<View>(null);
   const listRef = useRef<FlatList<Product>>(null);
@@ -128,11 +138,15 @@ export default function InventoryScreen() {
   );
 
   const keyword = query.trim().toLowerCase();
+  const hasKeyword = keyword.length > 0;
 
   const matched = useMemo(
     () => (keyword ? products.filter((product) => product.name.toLowerCase().includes(keyword)) : products),
     [products, keyword],
   );
+
+  /** 有关键词且一件都没匹配上：搜索态要优先于「仓库为空」态。 */
+  const noMatch = hasKeyword && matched.length === 0;
 
   const pinnedProducts = useMemo(() => matched.filter((product) => product.isPinned).sort(comparePinned), [matched]);
 
@@ -163,6 +177,8 @@ export default function InventoryScreen() {
 
   const pinnedCount = pinnedOrdered.length;
   const totalStock = products.reduce((sum, product) => sum + product.stock, 0);
+  /** 仓库为空时，出库与查询没有可操作的商品，保持灰色并给出提示。 */
+  const actionsLocked = products.length === 0;
 
   /** 根容器在屏幕中的原点，用于把屏幕坐标换算成覆盖层坐标。 */
   const measureRoot = useCallback((event: LayoutChangeEvent) => {
@@ -445,26 +461,18 @@ export default function InventoryScreen() {
           scrollEnabled={draggingId === null}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={
-            pinnedCount > 0 ? null : products.length === 0 ? (
-              <View style={styles.empty}>
-                <MaterialCommunityIcons name="package-variant" size={size.emptyIcon} color={colors.muted} />
-                <Text style={styles.emptyTitle} maxFontSizeMultiplier={textScale.title}>
-                  仓库还是空的
-                </Text>
-                <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyText}>点击下方「入库扫描」，扫到新条码后即可创建商品。</Text>
-              </View>
-            ) : (
-              <View style={styles.empty}>
-                <MaterialCommunityIcons name="magnify-close" size={size.emptyIcon} color={colors.muted} />
-                <Text style={styles.emptyTitle} maxFontSizeMultiplier={textScale.title}>
-                  没有匹配的商品
-                </Text>
-                <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyText}>没有名称包含「{query.trim()}」的商品，换个关键词试试。</Text>
-                <Pressable style={styles.emptyAction} onPress={() => setQuery('')}>
-                  <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyActionText}>清空搜索</Text>
-                </Pressable>
-              </View>
-            )
+            pinnedCount > 0 ? null : noMatch ? (
+              <EmptyState
+                icon="magnify-close"
+                title={`未找到名称包含“${query.trim()}”的商品`}
+                description={`请检查商品名称拼写，或切换至其他数据库查看。${
+                  products.length > 0 ? '搜索商品条码请使用页面下方的“库存查询”。' : ''
+                }`}
+                action={{ label: '清空搜索内容', onPress: closeSearch }}
+              />
+            ) : products.length === 0 ? (
+              <EmptyState icon="archive-outline" title="仓库目前还是空的" description="在此登记的商品将以双列卡片展示。" />
+            ) : null
           }
           renderItem={({ item }) => (
             <Pressable
@@ -479,6 +487,31 @@ export default function InventoryScreen() {
         />
       </View>
 
+      {/* 空仓库引导：手写箭头锚定在「入库扫描」按钮正上方，屏幕高度变化也不会指向别处。 */}
+      {products.length === 0 && !hasKeyword ? (
+        <View
+          pointerEvents="none"
+          style={[styles.callout, { bottom: actionBarHeight + ACTION_BAR_GAP + space.xs }]}
+        >
+          <View style={{ paddingLeft: calloutOffset }}>
+            <HandDrawnArrow width={ARROW_WIDTH} height={ARROW_HEIGHT} />
+          </View>
+          <Text
+            maxFontSizeMultiplier={textScale.body}
+            style={[
+              styles.calloutText,
+              // 文字左缘对齐箭尾（图片右上角），再整体下沉半行中文字符。
+              {
+                left: calloutOffset + ARROW_WIDTH,
+                bottom: ARROW_HEIGHT - ARROW_TAIL_Y - type.caption.lineHeight / 2,
+              },
+            ]}
+          >
+            点这里，扫码添加第一件商品
+          </Text>
+        </View>
+      ) : null}
+
       <View style={[styles.actionBarWrap, { bottom: ACTION_BAR_GAP }]} pointerEvents="box-none">
         <View
           style={styles.actionBar}
@@ -487,21 +520,40 @@ export default function InventoryScreen() {
             if (next > 0) setActionBarHeight(next);
           }}
         >
-          {actions.map((action, index) => (
-            <Fragment key={action.mode}>
-              {index > 0 ? <View style={styles.actionDivider} /> : null}
-              <Pressable
-                style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
-                onPress={() => router.push(`/scan/${action.mode}`)}
-                accessibilityLabel={action.label}
-              >
-                <View style={[styles.actionIcon, { backgroundColor: action.soft }]}>
-                  <MaterialCommunityIcons name={action.icon} size={22} color={action.color} />
-                </View>
-                <Text maxFontSizeMultiplier={textScale.body} style={[styles.actionLabel, { color: action.text }]}>{action.label}</Text>
-              </Pressable>
-            </Fragment>
-          ))}
+          {/* 内层只负责按圆角裁剪：按压高亮可以铺满整条操作条，又不裁掉外层的浮起阴影。 */}
+          <View style={styles.actionBarInner}>
+            {actions.map((action, index) => {
+              // 空仓库只保留「入库扫描」，出库与查询进入不可用态。
+              const blocked = actionsLocked && action.mode !== 'inbound';
+              return (
+                <Fragment key={action.mode}>
+                  {index > 0 ? <View style={styles.actionDivider} /> : null}
+                  <Pressable
+                    // 不可用统一走「保留原配色 + 整体降低不透明度」，与其它页面的禁用按钮一致。
+                    style={({ pressed }) => [
+                      styles.action,
+                      pressed && !blocked && styles.actionPressed,
+                      blocked && styles.actionBlocked,
+                    ]}
+                    onPress={() => {
+                      if (blocked) {
+                        setToast({ message: '添加商品后才可以点击', tone: 'info' });
+                        return;
+                      }
+                      router.push(`/scan/${action.mode}`);
+                    }}
+                    accessibilityLabel={action.label}
+                    accessibilityState={{ disabled: blocked }}
+                  >
+                    <View style={[styles.actionIcon, { backgroundColor: action.soft }]}>
+                      <MaterialCommunityIcons name={action.icon} size={22} color={action.color} />
+                    </View>
+                    <Text maxFontSizeMultiplier={textScale.body} style={[styles.actionLabel, { color: action.text }]}>{action.label}</Text>
+                  </Pressable>
+                </Fragment>
+              );
+            })}
+          </View>
         </View>
       </View>
 
@@ -679,7 +731,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.card,
     paddingHorizontal: space.md,
-    ...elevation.card,
+    // 输入框读作「内凹」而不是凸起按钮：细描边定位边界，不再叠卡片阴影。
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
   },
   searchInput: {
     flex: 1,
@@ -859,23 +913,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
   },
   actionBar: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
     backgroundColor: colors.card,
     borderRadius: radius.xl,
-    paddingVertical: space.sm,
     ...elevation.float,
+  },
+  /** 按压背景铺满整条：裁剪只在这里做，外层保留阴影。 */
+  actionBarInner: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    borderRadius: radius.xl,
+    overflow: 'hidden',
   },
   action: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.xs,
-    paddingVertical: space.xs,
-    borderRadius: radius.lg,
+    // 纵向内边距从操作条移到这里，按下时的灰底才能顶到上下边缘。
+    paddingVertical: space.md,
   },
   actionPressed: {
     backgroundColor: colors.bg,
+  },
+  /** 不可用：保留入口自身的识别色，只整体压暗，与其它页面的禁用按钮同一套规则。 */
+  actionBlocked: {
+    opacity: state.disabled,
   },
   actionIcon: {
     width: size.iconTile,
@@ -893,36 +955,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line,
     marginVertical: space.md,
   },
-  empty: {
-    marginTop: space.xxl,
-    alignItems: 'center',
-    paddingHorizontal: space.xl,
-    gap: space.sm,
+  /** 空仓库引导：贴在操作条上方，文字左对齐、箭头单独对准第一个按钮。 */
+  callout: {
+    position: 'absolute',
+    left: LIST_PADDING,
+    right: LIST_PADDING,
   },
-  emptyTitle: {
-    ...type.title,
-    color: colors.ink,
-    fontWeight: weight.bold,
-  },
-  emptyText: {
-    ...type.body,
+  calloutText: {
+    position: 'absolute',
+    ...type.caption,
     color: colors.muted,
     fontWeight: weight.regular,
-    textAlign: 'center',
-  },
-  emptyAction: {
-    marginTop: space.sm,
-    minHeight: size.touch,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.lg,
-    borderRadius: radius.md,
-    backgroundColor: colors.tealSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyActionText: {
-    ...type.body,
-    color: colors.tealStrong,
-    fontWeight: weight.bold,
+    // 轻微倾斜模拟手写批注，不用额外字体。
+    transform: [{ rotate: '-2deg' }],
   },
 });

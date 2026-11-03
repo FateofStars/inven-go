@@ -1,10 +1,12 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import EmptyState from '@/components/EmptyState';
 import { useInventory } from '@/context/InventoryContext';
+import { formatBarcodeInText } from '@/lib/barcodeFormat';
 import { formatTimestamp } from '@/lib/format';
 import { type LogEntry, type LogType } from '@/lib/types';
 import { colors, elevation, press, radius, size, space, textScale, type, weight } from '@/theme';
@@ -217,24 +219,19 @@ export default function LogsScreen() {
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           filtering ? (
-            <View style={styles.empty}>
-              <MaterialCommunityIcons name="filter-remove-outline" size={size.emptyIcon} color={colors.muted} />
-              <Text style={styles.emptyTitle} maxFontSizeMultiplier={textScale.title}>
-                没有符合条件的日志
-              </Text>
-              <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyText}>换个操作类型或时间范围试试，也可以清空搜索关键词。</Text>
-              <Pressable style={styles.emptyAction} onPress={reset}>
-                <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyActionText}>清空筛选条件</Text>
-              </Pressable>
-            </View>
+            <EmptyState
+              icon="filter-remove-outline"
+              title="无符合筛选条件的日志"
+              description="当前搜索词、时间段或操作类型下暂无变动记录。"
+              action={{ label: '重置筛选条件', onPress: closeSearch }}
+            />
           ) : (
-            <View style={styles.empty}>
-              <MaterialCommunityIcons name="clipboard-text-clock-outline" size={size.emptyIcon} color={colors.muted} />
-              <Text style={styles.emptyTitle} maxFontSizeMultiplier={textScale.title}>
-                还没有操作记录
-              </Text>
-              <Text maxFontSizeMultiplier={textScale.body} style={styles.emptyText}>入库、出库、新增、删除、条码更新以及导入导出会出现在这里。</Text>
-            </View>
+            <EmptyState
+              icon="file-document-outline"
+              title="暂无出入库流水"
+              description="当您执行扫码出入库、增删商品或数据备份时，详细操作记录会自动沉淀在此。"
+              action={{ label: '前往扫码出入库', onPress: () => router.navigate('/') }}
+            />
           )
         }
         renderItem={({ item }) => <LogRow entry={item} />}
@@ -268,7 +265,7 @@ function LogRow({ entry }: { entry: LogEntry }) {
           <Text maxFontSizeMultiplier={textScale.body} style={[styles.badge, { color: palette.text }]}>{typeLabel(entry.type)}</Text>
           <Text maxFontSizeMultiplier={textScale.body} style={styles.time}>{formatTimestamp(entry.timestamp)}</Text>
         </View>
-        <Text maxFontSizeMultiplier={textScale.body} style={styles.detail}>{entry.detail}</Text>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.detail}>{formatBarcodeInText(entry.detail)}</Text>
       </View>
     </View>
   );
@@ -327,7 +324,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.card,
     paddingHorizontal: space.md,
-    ...elevation.card,
+    // 输入框读作「内凹」而不是凸起按钮：细描边定位边界，不再叠卡片阴影。
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
   },
   searchInput: {
     flex: 1,
@@ -400,7 +399,7 @@ const styles = StyleSheet.create({
   },
   chipText: {
     color: colors.muted,
-    ...type.bodyTight,
+    ...type.body,
     fontWeight: weight.regular,
   },
   chipTextActive: {
@@ -456,37 +455,5 @@ const styles = StyleSheet.create({
     color: colors.ink,
     ...type.body,
     fontWeight: weight.regular,
-  },
-  empty: {
-    marginTop: space.xxl,
-    alignItems: 'center',
-    paddingHorizontal: space.xl,
-    gap: space.sm,
-  },
-  emptyTitle: {
-    color: colors.ink,
-    ...type.title,
-    fontWeight: weight.bold,
-  },
-  emptyText: {
-    color: colors.muted,
-    ...type.body,
-    fontWeight: weight.regular,
-    textAlign: 'center',
-  },
-  emptyAction: {
-    marginTop: space.sm,
-    minHeight: size.touch,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.lg,
-    borderRadius: radius.md,
-    backgroundColor: colors.navySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyActionText: {
-    color: colors.navyStrong,
-    ...type.body,
-    fontWeight: weight.bold,
   },
 });

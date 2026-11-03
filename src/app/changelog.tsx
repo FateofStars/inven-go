@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    ...type.heading,
+    ...type.title,
     fontWeight: weight.bold,
   },
   pressed: {

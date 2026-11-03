@@ -2,7 +2,7 @@
   "expo": {
     "name": "Inven Go",
     "slug": "inven-go",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "orientation": "portrait",
     "icon": "./logo/Invengo-logo.png",
     "userInterfaceStyle": "light",

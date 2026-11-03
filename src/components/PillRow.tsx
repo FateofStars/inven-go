@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     gap: space.xs,
   },
   pillTitle: {
-    ...type.bodyLg,
+    ...type.title,
     fontWeight: weight.bold,
   },
   pillText: {

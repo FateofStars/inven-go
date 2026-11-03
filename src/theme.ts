@@ -100,14 +100,15 @@ export const weight = {
   bold: '700',
 } as const;
 
-/** 字号阶梯：正文 12 / 14 / 16 / 18，标题 20 / 24，数字 32 / 44 / 56。 */
+/**
+ * 字号阶梯：12 / 14 / 18 / 24 / 32 / 44 / 56。
+ * 不再保留 16 与 20 两个中间档——它们与相邻档位的差距不到 15%，
+ * 层级上彼此吃掉；控件标签统一回落到 14，标题统一 18，页面/弹窗标题统一 24。
+ */
 export const type = {
   caption: { fontSize: 12, lineHeight: 18 },
   body: { fontSize: 14, lineHeight: 22 },
-  bodyTight: { fontSize: 14, lineHeight: 20 },
-  bodyLg: { fontSize: 16, lineHeight: 24 },
   title: { fontSize: 18, lineHeight: 26 },
-  heading: { fontSize: 20, lineHeight: 28 },
   display: { fontSize: 24, lineHeight: 32 },
   number: { fontSize: 32, lineHeight: 36 },
   numberLg: { fontSize: 44, lineHeight: 48 },

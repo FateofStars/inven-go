@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { clearSnapshots } from '@/lib/backup';
+import { cleanBarcode } from '@/lib/barcodeFormat';
 import {
   createId,
   emptyDatabase,
@@ -218,7 +219,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const inboundScan = useCallback(
     (barcode: string) =>
       commit<InboundResult>((current) => {
-        const normalized = barcode.trim();
+        const normalized = cleanBarcode(barcode);
         const index = current.products.findIndex((product) => product.barcodes.includes(normalized));
         if (index < 0) return { next: current, result: { kind: 'missing' as const } };
         const product = current.products[index];
@@ -241,7 +242,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const outboundScan = useCallback(
     (barcode: string) =>
       commit<OutboundResult>((current) => {
-        const normalized = barcode.trim();
+        const normalized = cleanBarcode(barcode);
         const index = current.products.findIndex((product) => product.barcodes.includes(normalized));
         if (index < 0) return { next: current, result: { kind: 'missing' as const } };
         const product = current.products[index];
@@ -266,7 +267,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     (name: string, barcode: string, quantity?: number) =>
       commit<CreateResult>((current) => {
         const normalizedName = name.trim();
-        const normalized = barcode.trim();
+        const normalized = cleanBarcode(barcode);
         if (!normalizedName || !normalized) return { next: current, result: { kind: 'invalid' as const } };
         if (findProductByBarcode(current.products, normalized)) {
           return { next: current, result: { kind: 'duplicate' as const } };
@@ -299,7 +300,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const bindBarcode = useCallback(
     (productId: string, barcode: string, quantity?: number) =>
       commit<BindResult>((current) => {
-        const normalized = barcode.trim();
+        const normalized = cleanBarcode(barcode);
         const index = current.products.findIndex((product) => product.id === productId);
         if (index < 0 || !normalized) return { next: current, result: { kind: 'missing-product' as const } };
         const owner = findProductByBarcode(current.products, normalized);
@@ -332,7 +333,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const addBarcode = useCallback(
     (productId: string, barcode: string) =>
       commit<BarcodeOpResult>((current) => {
-        const normalized = barcode.trim();
+        const normalized = cleanBarcode(barcode);
         if (!normalized) return { next: current, result: { kind: 'invalid' as const } };
         const index = current.products.findIndex((product) => product.id === productId);
         if (index < 0) return { next: current, result: { kind: 'not-found' as const } };
@@ -362,8 +363,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const replaceBarcode = useCallback(
     (productId: string, previous: string, replacement: string) =>
       commit<BarcodeOpResult>((current) => {
-        const from = previous.trim();
-        const to = replacement.trim();
+        const from = cleanBarcode(previous);
+        const to = cleanBarcode(replacement);
         if (!to) return { next: current, result: { kind: 'invalid' as const } };
         const index = current.products.findIndex((product) => product.id === productId);
         if (index < 0) return { next: current, result: { kind: 'not-found' as const } };
@@ -394,7 +395,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const removeBarcode = useCallback(
     (productId: string, barcode: string) =>
       commit<BarcodeOpResult>((current) => {
-        const normalized = barcode.trim();
+        const normalized = cleanBarcode(barcode);
         const index = current.products.findIndex((product) => product.id === productId);
         if (index < 0) return { next: current, result: { kind: 'not-found' as const } };
         const product = current.products[index];

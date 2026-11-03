@@ -1,14 +1,16 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddProductModal, type ProductSelection } from '@/components/AddProductModal';
+import EmptyState from '@/components/EmptyState';
 import { QuantitySheet } from '@/components/QuantitySheet';
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
 import { useInventory } from '@/context/InventoryContext';
 import { BARCODE_TYPES } from '@/lib/barcode';
+import { cleanBarcode, formatBarcode } from '@/lib/barcodeFormat';
 import type { Product } from '@/lib/types';
 import { colors, radius, size, space, textScale, type, weight } from '@/theme';
 
@@ -277,7 +279,7 @@ export default function ScanScreen() {
 
   const submitComposer = async () => {
     if (!composer || submitting) return;
-    const barcode = composer.barcode.trim();
+    const barcode = cleanBarcode(composer.barcode);
     if (!barcode) {
       setFormError('请填写条形码');
       return;
@@ -351,15 +353,19 @@ export default function ScanScreen() {
 
   if (!permission.granted) {
     return (
-      <View style={[styles.permission, { paddingTop: insets.top + space.xl }]}>
-        <Text style={styles.permissionTitle} maxFontSizeMultiplier={textScale.title}>
-          需要相机权限
-        </Text>
-        <Text maxFontSizeMultiplier={textScale.body} style={styles.permissionText}>扫描条形码前，请允许库存管理使用相机。</Text>
-        <Pressable style={styles.permissionButton} onPress={() => void requestPermission()}>
-          <Text maxFontSizeMultiplier={textScale.body} style={styles.permissionButtonText}>允许使用相机</Text>
-        </Pressable>
-        <Pressable onPress={() => router.back()}>
+      <View
+        style={[
+          styles.permission,
+          { paddingTop: insets.top + space.lg, paddingBottom: insets.bottom + space.lg },
+        ]}
+      >
+        <EmptyState
+          icon="camera-outline"
+          title="需要相机权限"
+          description="扫描条形码前，请允许库存管理使用相机。"
+          action={{ label: '允许使用相机', onPress: () => void requestPermission() }}
+        />
+        <Pressable style={styles.backButton} onPress={() => router.back()} accessibilityLabel="返回">
           <Text maxFontSizeMultiplier={textScale.body} style={styles.backLink}>返回</Text>
         </Pressable>
       </View>
@@ -422,26 +428,41 @@ export default function ScanScreen() {
         <View style={styles.cardBackdrop}>
           <View style={styles.queryCard}>
             <Text maxFontSizeMultiplier={textScale.body} style={styles.queryKicker}>查询结果</Text>
-            <Text style={styles.queryName} maxFontSizeMultiplier={textScale.title} numberOfLines={2}>
-              {liveProduct.name}
-            </Text>
-            <Text style={styles.queryStock} maxFontSizeMultiplier={textScale.number}>
-              {liveProduct.stock}
-            </Text>
-            <Text maxFontSizeMultiplier={textScale.body} style={styles.queryStockLabel}>当前剩余库存</Text>
-            <Text maxFontSizeMultiplier={textScale.body} style={styles.queryBarcodeTitle}>绑定条码</Text>
-            {/* 条码多时只压缩这一块，产品名、库存与底部按钮始终可见。 */}
-            <ScrollView style={styles.queryBarcodeList} showsVerticalScrollIndicator={false}>
-              {liveProduct.barcodes.map((code) => {
-                const matched = code === queryHit.barcode;
-                return (
-                  <Text maxFontSizeMultiplier={textScale.body} key={code} style={[styles.queryBarcode, matched && styles.queryBarcodeHit]}>
-                    {matched ? '本次扫描 · ' : ''}
-                    {code}
-                  </Text>
-                );
-              })}
-            </ScrollView>
+            <View style={styles.querySection}>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.querySectionTitle}>基础库存信息</Text>
+              <Text style={styles.queryName} maxFontSizeMultiplier={textScale.title} numberOfLines={2}>
+                {liveProduct.name}
+              </Text>
+              <Text style={styles.queryStock} maxFontSizeMultiplier={textScale.number}>
+                {liveProduct.stock}
+              </Text>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.queryStockLabel}>当前剩余库存</Text>
+            </View>
+            <View style={styles.querySection}>
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.querySectionTitle}>绑定条码</Text>
+              {/* 条码多时只压缩这一块，产品名、库存与底部按钮始终可见。 */}
+              <ScrollView style={styles.queryBarcodeList} showsVerticalScrollIndicator={false}>
+                {liveProduct.barcodes.map((code) => {
+                  const matched = code === queryHit.barcode;
+                  return (
+                    // 「本次扫描」独占一行，条码始终拿到整行宽度，13 位长码不会被标记文字挤到截断。
+                    <View key={code} style={[styles.queryBarcode, matched && styles.queryBarcodeHit]}>
+                      {matched ? (
+                        <Text maxFontSizeMultiplier={textScale.body} style={styles.queryBarcodeHitLabel}>
+                          本次扫描
+                        </Text>
+                      ) : null}
+                      <Text
+                        maxFontSizeMultiplier={textScale.body}
+                        style={[styles.queryBarcodeText, matched && styles.queryBarcodeTextHit]}
+                      >
+                        {formatBarcode(code)}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
             <Pressable
               style={styles.queryClose}
               onPress={() => {
@@ -594,30 +615,33 @@ const styles = StyleSheet.create({
     ...type.caption,
     fontWeight: weight.bold,
   },
+  /** 每个信息块独立成组，块间留白 16，标题只用 12px 弱化灰字。 */
+  querySection: {
+    marginTop: space.lg,
+  },
+  querySectionTitle: {
+    color: colors.muted,
+    ...type.caption,
+    fontWeight: weight.bold,
+    marginBottom: space.sm,
+  },
   queryName: {
-    marginTop: space.sm,
     color: colors.ink,
     ...type.display,
     fontWeight: weight.bold,
   },
   queryStock: {
-    marginTop: space.md,
+    marginTop: space.sm,
     color: colors.teal,
     ...type.numberLg,
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
   },
   queryStockLabel: {
+    marginTop: space.xs,
     color: colors.muted,
     ...type.caption,
     fontWeight: weight.regular,
-  },
-  queryBarcodeTitle: {
-    marginTop: space.lg,
-    marginBottom: space.sm,
-    color: colors.ink,
-    ...type.body,
-    fontWeight: weight.bold,
   },
   /** 唯一可压缩的区域：条码再多也不会把上方信息或底部按钮挤出屏幕。 */
   queryBarcodeList: {
@@ -625,18 +649,30 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   queryBarcode: {
-    color: colors.ink,
     backgroundColor: colors.bg,
     borderRadius: radius.md,
     paddingHorizontal: space.md,
     paddingVertical: space.md,
     marginBottom: space.sm,
+  },
+  queryBarcodeText: {
+    color: colors.ink,
     ...type.body,
+    fontFamily: Platform.OS === 'android' ? 'monospace' : 'Menlo',
     fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
   },
   queryBarcodeHit: {
-    backgroundColor: colors.highlight,
-    color: colors.ink,
+    backgroundColor: colors.greenSoft,
+  },
+  queryBarcodeHitLabel: {
+    color: colors.greenStrong,
+    ...type.caption,
+    fontWeight: weight.bold,
+    marginBottom: space.xs,
+  },
+  queryBarcodeTextHit: {
+    color: colors.greenStrong,
     fontWeight: weight.bold,
   },
   queryClose: {
@@ -651,38 +687,18 @@ const styles = StyleSheet.create({
   },
   queryCloseText: {
     color: colors.white,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
   permission: {
     flex: 1,
     backgroundColor: colors.bg,
-    paddingHorizontal: space.xl,
     gap: space.lg,
   },
-  permissionTitle: {
-    color: colors.ink,
-    ...type.display,
-    fontWeight: weight.bold,
-  },
-  permissionText: {
-    color: colors.muted,
-    ...type.body,
-    fontWeight: weight.regular,
-  },
-  permissionButton: {
-    minHeight: size.control,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.teal,
+  backButton: {
+    minHeight: size.touch,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  permissionButtonText: {
-    color: colors.white,
-    ...type.bodyLg,
-    fontWeight: weight.bold,
   },
   backLink: {
     color: colors.tealStrong,

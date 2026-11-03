@@ -136,16 +136,23 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 0,
     flexShrink: 1,
+    /**
+     * ScrollView 会把超出自身边界的阴影裁掉。左右各外扩 8，配合下方内容区的 8 内边距，
+     * 卡片内容仍停在原来的缩进位置，但卡片阴影有了完整的绘制空间。
+     */
+    marginHorizontal: -space.sm,
   },
   contentInner: {
     /** 首个子元素与说明文字之间、以及各区块之间统一留出 12px 的垂直节奏。 */
     paddingTop: space.md,
-    paddingBottom: 0,
+    // 底部留出阴影空间，避免最后一张卡片的下阴影被滚动视口截断。
+    paddingBottom: space.sm,
+    paddingHorizontal: space.sm,
     gap: space.md,
   },
   title: {
     color: colors.ink,
-    ...type.heading,
+    ...type.display,
     fontWeight: weight.bold,
   },
   description: {
@@ -155,7 +162,8 @@ const styles = StyleSheet.create({
     fontWeight: weight.regular,
   },
   headerBlock: {
-    marginTop: space.md,
+    // 说明文字与提示条属于同一段引导信息，间距比区块之间（12）再紧一档。
+    marginTop: space.sm,
   },
   footerBlock: {
     marginTop: space.md,
@@ -175,7 +183,7 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     color: colors.ink,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.regular,
   },
   confirm: {
@@ -191,7 +199,7 @@ const styles = StyleSheet.create({
   },
   confirmText: {
     color: colors.white,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
   /** 统一按压反馈。 */

@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
     opacity: press.opacity,
   },
   message: {
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
   hint: {

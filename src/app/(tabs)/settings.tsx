@@ -106,27 +106,31 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: space.lg,
     paddingBottom: space.lg,
-    gap: space.md,
+    // 摘要与操作列表属于两套功能：模块间距（24）明显大于列表内部间距（12）。
+    gap: space.xl,
   },
+  /** 摘要只读信息不再是页面最重的一块：浅底 + 细线，让下方的操作列表先被看到。 */
   summary: {
-    backgroundColor: colors.ink,
+    backgroundColor: colors.card,
     borderRadius: radius.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
     padding: space.xl,
     gap: space.sm,
   },
   summaryLabel: {
-    color: colors.onInkMuted,
+    color: colors.muted,
     ...type.caption,
     fontWeight: weight.regular,
   },
   summaryValue: {
-    color: colors.onInk,
-    ...type.heading,
+    color: colors.ink,
+    ...type.title,
     fontWeight: weight.bold,
     fontVariant: ['tabular-nums'],
   },
   summaryHint: {
-    color: colors.onInkFaint,
+    color: colors.muted,
     ...type.body,
     fontWeight: weight.regular,
   },

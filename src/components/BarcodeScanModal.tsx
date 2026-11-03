@@ -1,10 +1,11 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarcodeReplaceSheet } from '@/components/BarcodeReplaceSheet';
 import { BARCODE_TYPES } from '@/lib/barcode';
+import { editBarcode, formatBarcode } from '@/lib/barcodeFormat';
 import { colors, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 /** 清空输入后短时间内忽略刚被清掉的条码，留出把镜头移向新条码的时间。 */
@@ -150,8 +151,8 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
 
         <View style={[styles.bottom, { paddingBottom: insets.bottom + space.xl }]}>
           <TextInput
-            value={value}
-            onChangeText={setValue}
+            value={formatBarcode(value)}
+            onChangeText={(text) => setValue(editBarcode(value, text))}
             placeholder="手动输入条形码"
             placeholderTextColor={colors.muted}
             style={styles.input}
@@ -206,7 +207,7 @@ const styles = StyleSheet.create({
   },
   permissionTitle: {
     color: colors.white,
-    ...type.heading,
+    ...type.display,
     fontWeight: weight.bold,
   },
   permissionText: {
@@ -225,7 +226,7 @@ const styles = StyleSheet.create({
   },
   permissionButtonText: {
     color: colors.white,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
   top: {
@@ -291,7 +292,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     color: colors.ink,
     ...type.body,
+    fontFamily: Platform.OS === 'android' ? 'monospace' : 'Menlo',
     fontVariant: ['tabular-nums'],
+    letterSpacing: 1,
   },
   actions: {
     flexDirection: 'row',
@@ -311,7 +314,7 @@ const styles = StyleSheet.create({
   },
   clearText: {
     color: colors.white,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.regular,
   },
   submit: {
@@ -328,7 +331,7 @@ const styles = StyleSheet.create({
   },
   submitText: {
     color: colors.white,
-    ...type.bodyLg,
+    ...type.body,
     fontWeight: weight.bold,
   },
 });
