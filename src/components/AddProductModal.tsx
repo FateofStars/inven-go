@@ -5,7 +5,7 @@ import { QuantityStepper } from '@/components/QuantityStepper';
 import { SheetModal } from '@/components/SheetModal';
 import { editBarcode, formatBarcode } from '@/lib/barcodeFormat';
 import type { Product } from '@/lib/types';
-import { colors, radius, size, space, state, textScale, type, weight } from '@/theme';
+import { colors, press, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 /**
  * 搜索结果列表的固定高度。
@@ -93,7 +93,7 @@ export function AddProductModal({
             autoCapitalize="none"
             autoCorrect={false}
           />
-          <Pressable style={styles.rescan} onPress={onRescan}>
+          <Pressable style={({ pressed }) => [styles.rescan, pressed && styles.pressed]} onPress={onRescan}>
             <Text maxFontSizeMultiplier={textScale.body} style={styles.rescanText}>重新扫描</Text>
           </Pressable>
         </View>
@@ -133,7 +133,7 @@ export function AddProductModal({
             showsVerticalScrollIndicator
           >
             <Pressable
-              style={styles.option}
+              style={({ pressed }) => [styles.option, pressed && styles.pressed]}
               onPress={() => {
                 onChangeSelection({ type: 'new' });
                 onChangeName(query.trim());
@@ -154,7 +154,7 @@ export function AddProductModal({
               return (
                 <Pressable
                   key={product.id}
-                  style={[styles.option, active && styles.optionActive]}
+                  style={({ pressed }) => [styles.option, active && styles.optionActive, pressed && styles.pressed]}
                   onPress={() => {
                     onChangeSelection({ type: 'existing', productId: product.id });
                     onChangeQuery(product.name);
@@ -195,10 +195,18 @@ export function AddProductModal({
       </ScrollView>
 
       <View style={styles.actions}>
-        <Pressable style={styles.cancel} onPress={onClose} disabled={submitting}>
+        <Pressable
+          style={({ pressed }) => [styles.cancel, pressed && !submitting && styles.pressed]}
+          onPress={onClose}
+          disabled={submitting}
+        >
           <Text maxFontSizeMultiplier={textScale.body} style={styles.cancelText}>取消</Text>
         </Pressable>
-        <Pressable style={[styles.save, submitting && styles.disabled]} onPress={onSubmit} disabled={submitting}>
+        <Pressable
+          style={({ pressed }) => [styles.save, submitting && styles.disabled, pressed && !submitting && styles.pressed]}
+          onPress={onSubmit}
+          disabled={submitting}
+        >
           <Text maxFontSizeMultiplier={textScale.body} style={styles.saveText}>{submitting ? '保存中…' : '确认添加'}</Text>
         </Pressable>
       </View>
@@ -262,17 +270,18 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     letterSpacing: 1,
   },
+  /** 次要行动：浅色底 + 深色字，不与底部「确认添加」争夺主行动。 */
   rescan: {
     minHeight: size.control,
     paddingVertical: space.sm,
     paddingHorizontal: space.md,
     borderRadius: radius.md,
-    backgroundColor: colors.navy,
+    backgroundColor: colors.navySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rescanText: {
-    color: colors.white,
+    color: colors.navyStrong,
     ...type.body,
     fontWeight: weight.bold,
   },
@@ -372,5 +381,9 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: state.disabled,
+  },
+  /** 统一按压反馈。 */
+  pressed: {
+    opacity: press.opacity,
   },
 });

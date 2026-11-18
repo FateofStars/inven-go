@@ -5,6 +5,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddProductModal, type ProductSelection } from '@/components/AddProductModal';
+import { CameraTopScrim, ScanFrame } from '@/components/CameraOverlay';
 import EmptyState from '@/components/EmptyState';
 import { QuantitySheet } from '@/components/QuantitySheet';
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
@@ -12,7 +13,7 @@ import { useInventory } from '@/context/InventoryContext';
 import { BARCODE_TYPES } from '@/lib/barcode';
 import { cleanBarcode, formatBarcode } from '@/lib/barcodeFormat';
 import type { Product } from '@/lib/types';
-import { colors, radius, size, space, textScale, type, weight } from '@/theme';
+import { colors, press, radius, size, space, textScale, type, weight } from '@/theme';
 
 /** 全局死锁时长：命中有效商品后 3 秒内忽略全部扫码事件。 */
 const SCAN_LOCK_MS = 3000;
@@ -365,7 +366,11 @@ export default function ScanScreen() {
           description="扫描条形码前，请允许库存管理使用相机。"
           action={{ label: '允许使用相机', onPress: () => void requestPermission() }}
         />
-        <Pressable style={styles.backButton} onPress={() => router.back()} accessibilityLabel="返回">
+        <Pressable
+          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+          onPress={() => router.back()}
+          accessibilityLabel="返回"
+        >
           <Text maxFontSizeMultiplier={textScale.body} style={styles.backLink}>返回</Text>
         </Pressable>
       </View>
@@ -386,8 +391,14 @@ export default function ScanScreen() {
         onBarcodeScanned={scannerEnabled ? onBarcodeScanned : undefined}
       />
       <View style={styles.overlay} pointerEvents="box-none">
+        {/* 顶部渐变遮罩：保证白色标题与引导文案在明亮画面下依然可读。 */}
+        <CameraTopScrim height={insets.top + 112} />
         <View style={[styles.topBar, { paddingTop: insets.top + space.sm }]}>
-          <Pressable style={styles.iconButton} onPress={() => router.back()}>
+          <Pressable
+            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+            onPress={() => router.back()}
+            accessibilityLabel="关闭扫码"
+          >
             <Text maxFontSizeMultiplier={textScale.body} style={styles.iconText}>关闭</Text>
           </Pressable>
           <View style={styles.titleWrap}>
@@ -398,17 +409,24 @@ export default function ScanScreen() {
               {rescanning ? '对准新条码，扫描后自动返回表单' : cooling ? COOLING_HINT : hints[mode]}
             </Text>
           </View>
-          <Pressable style={styles.iconButton} onPress={() => setTorch((value) => !value)}>
+          <Pressable
+            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+            onPress={() => setTorch((value) => !value)}
+            accessibilityLabel={torch ? '关闭补光' : '开启补光'}
+          >
             <Text maxFontSizeMultiplier={textScale.body} style={styles.iconText}>{torch ? '关灯' : '补光'}</Text>
           </Pressable>
         </View>
 
         <View style={styles.frame} pointerEvents="none">
-          <View style={styles.frameBox} />
+          <ScanFrame />
         </View>
 
         {rescanning ? (
-          <Pressable style={[styles.resume, { bottom: insets.bottom + space.xl }]} onPress={() => setRescanning(false)}>
+          <Pressable
+            style={({ pressed }) => [styles.resume, { bottom: insets.bottom + space.xl }, pressed && styles.pressed]}
+            onPress={() => setRescanning(false)}
+          >
             <Text maxFontSizeMultiplier={textScale.body} style={styles.resumeText}>返回添加商品</Text>
           </Pressable>
         ) : null}
@@ -464,7 +482,7 @@ export default function ScanScreen() {
               </ScrollView>
             </View>
             <Pressable
-              style={styles.queryClose}
+              style={({ pressed }) => [styles.queryClose, pressed && styles.pressed]}
               onPress={() => {
                 // 查询是「看一眼下一个」的高频动作，这里提前解锁，不必等满 3 秒。
                 releaseScanLock();
@@ -573,13 +591,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  frameBox: {
-    width: size.scanFrameWidth,
-    height: size.scanFrameHeight,
-    borderRadius: radius.lg,
-    borderWidth: 2,
-    borderColor: colors.card,
-    backgroundColor: 'transparent',
+  /** 统一按压反馈。 */
+  pressed: {
+    opacity: press.opacity,
   },
   resume: {
     position: 'absolute',

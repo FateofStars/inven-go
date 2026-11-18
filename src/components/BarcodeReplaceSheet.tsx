@@ -4,7 +4,7 @@ import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatBarcode } from '@/lib/barcodeFormat';
-import { colors, elevation, radius, size, space, textScale, type, weight } from '@/theme';
+import { colors, elevation, press, radius, size, space, textScale, type, weight } from '@/theme';
 
 type BarcodeReplaceSheetProps = {
   previous: string;
@@ -68,10 +68,10 @@ export function BarcodeReplaceSheet({ previous, next, onCancel, onConfirm }: Bar
         </View>
 
         <View style={styles.actions}>
-          <Pressable style={styles.cancel} onPress={onCancel}>
+          <Pressable style={({ pressed }) => [styles.cancel, pressed && styles.pressed]} onPress={onCancel}>
             <Text maxFontSizeMultiplier={textScale.body} style={styles.cancelText}>取消</Text>
           </Pressable>
-          <Pressable style={styles.confirm} onPress={onConfirm}>
+          <Pressable style={({ pressed }) => [styles.confirm, pressed && styles.pressed]} onPress={onConfirm}>
             <Text maxFontSizeMultiplier={textScale.body} style={styles.confirmText}>确认替换</Text>
           </Pressable>
         </View>
@@ -182,5 +182,9 @@ const styles = StyleSheet.create({
     color: colors.white,
     ...type.body,
     fontWeight: weight.bold,
+  },
+  /** 统一按压反馈。 */
+  pressed: {
+    opacity: press.opacity,
   },
 });

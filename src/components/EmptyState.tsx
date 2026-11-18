@@ -34,10 +34,7 @@ export default function EmptyState({ icon, title, description, action, compact =
         {title}
       </Text>
       {description ? (
-        <Text
-          maxFontSizeMultiplier={textScale.body}
-          style={[styles.description, compact && styles.compactDescription]}
-        >
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.description}>
           {description}
         </Text>
       ) : null}
@@ -90,9 +87,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontWeight: weight.regular,
     textAlign: 'center',
-  },
-  compactDescription: {
-    lineHeight: 20,
   },
   action: {
     marginTop: space.sm,

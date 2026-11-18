@@ -406,7 +406,7 @@ export default function InventoryScreen() {
               />
               {query.length > 0 ? (
                 <Pressable
-                  style={styles.searchClear}
+                  style={({ pressed }) => [styles.searchClear, pressed && styles.pressed]}
                   onPress={() => setQuery('')}
                   accessibilityLabel="清空搜索"
                 >
@@ -414,7 +414,11 @@ export default function InventoryScreen() {
                 </Pressable>
               ) : null}
             </View>
-            <Pressable style={styles.cancel} onPress={closeSearch} hitSlop={space.md}>
+            <Pressable
+              style={({ pressed }) => [styles.cancel, pressed && styles.pressed]}
+              onPress={closeSearch}
+              hitSlop={space.md}
+            >
               <Text maxFontSizeMultiplier={textScale.body} style={styles.cancelText}>取消</Text>
             </Pressable>
           </>

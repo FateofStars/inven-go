@@ -57,7 +57,8 @@ export const colors = {
 
   // —— 特定场景 ——
   highlight: '#F8E7A8',
-  pinMuted: '#9CA3AF',
+  /** 暖灰：与暖米 / 石墨中性色同族，避免深色面上出现一块偏蓝的冷灰。 */
+  pinMuted: '#A79C8C',
   placeholderLine: '#C9C0B2',
   overlay: 'rgba(16, 17, 15, 0.62)',
 

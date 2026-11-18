@@ -4,9 +4,10 @@ import { Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarcodeReplaceSheet } from '@/components/BarcodeReplaceSheet';
+import { CameraTopScrim, ScanFrame } from '@/components/CameraOverlay';
 import { BARCODE_TYPES } from '@/lib/barcode';
 import { editBarcode, formatBarcode } from '@/lib/barcodeFormat';
-import { colors, radius, size, space, state, textScale, type, weight } from '@/theme';
+import { colors, press, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 /** 清空输入后短时间内忽略刚被清掉的条码，留出把镜头移向新条码的时间。 */
 const CLEAR_GRACE_MS = 1500;
@@ -113,7 +114,7 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
             />
             {/* 取景框绝对定位在全屏容器正中：底部输入区增删内容都不会让它位移。 */}
             <View style={styles.frame} pointerEvents="none">
-              <View style={styles.frameBox} />
+              <ScanFrame />
             </View>
           </>
         ) : (
@@ -122,14 +123,23 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
               需要相机权限
             </Text>
             <Text maxFontSizeMultiplier={textScale.body} style={styles.permissionText}>允许使用相机后即可扫码，也可以在下方直接手动录入条码。</Text>
-            <Pressable style={styles.permissionButton} onPress={() => void requestPermission()}>
+            <Pressable
+              style={({ pressed }) => [styles.permissionButton, pressed && styles.pressed]}
+              onPress={() => void requestPermission()}
+            >
               <Text maxFontSizeMultiplier={textScale.body} style={styles.permissionButtonText}>允许使用相机</Text>
             </Pressable>
           </View>
         )}
 
+        {/* 顶部渐变遮罩：保证白色标题与引导文案在明亮画面下依然可读。 */}
+        {granted ? <CameraTopScrim height={insets.top + 108} /> : null}
         <View style={[styles.top, { paddingTop: insets.top + space.sm }]}>
-          <Pressable style={styles.iconButton} onPress={onCancel}>
+          <Pressable
+            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+            onPress={onCancel}
+            accessibilityLabel="关闭扫码"
+          >
             <Text maxFontSizeMultiplier={textScale.body} style={styles.iconText}>关闭</Text>
           </Pressable>
           <View style={styles.titleWrap}>
@@ -139,7 +149,7 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
             <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>{statusHint}</Text>
           </View>
           <Pressable
-            style={styles.iconButton}
+            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
             onPress={() => setTorch((current) => !current)}
             accessibilityLabel={torch ? '关闭补光' : '开启补光'}
           >
@@ -163,7 +173,7 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
           />
           <View style={styles.actions}>
             <Pressable
-              style={[styles.clear, !value && styles.clearDisabled]}
+              style={({ pressed }) => [styles.clear, !value && styles.clearDisabled, pressed && styles.pressed]}
               onPress={clearInput}
               disabled={!value}
               accessibilityState={{ disabled: !value }}
@@ -171,7 +181,7 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
               <Text maxFontSizeMultiplier={textScale.body} style={styles.clearText}>清空输入</Text>
             </Pressable>
             <Pressable
-              style={[styles.submit, !trimmed && styles.submitDisabled]}
+              style={({ pressed }) => [styles.submit, !trimmed && styles.submitDisabled, pressed && styles.pressed]}
               onPress={submitTyped}
               disabled={!trimmed}
               accessibilityState={{ disabled: !trimmed }}
@@ -273,12 +283,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  frameBox: {
-    width: size.scanFrameWidth,
-    height: size.scanFrameHeight,
-    borderRadius: radius.lg,
-    borderWidth: 2,
-    borderColor: colors.card,
+  /** 统一按压反馈。 */
+  pressed: {
+    opacity: press.opacity,
   },
   bottom: {
     gap: space.md,

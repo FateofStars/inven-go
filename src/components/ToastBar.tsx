@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, elevation, press, radius, space, textScale, type, weight } from '@/theme';
@@ -10,6 +11,8 @@ type ToastBarProps = {
   /** 覆盖主文案字色；不传则跟随该 tone 的默认字色。 */
   messageColor?: string;
   actionHint?: string;
+  /** 右侧附带的行动按钮（如「撤销」），不传时提示条只展示文案。 */
+  action?: ReactNode;
   onPress?: () => void;
   bottom: number;
 };
@@ -20,7 +23,7 @@ const toneStyle = {
   info: { background: colors.toastInfoBg, label: colors.white },
 } as const;
 
-export function ToastBar({ message, tone, messageColor, actionHint, onPress, bottom }: ToastBarProps) {
+export function ToastBar({ message, tone, messageColor, actionHint, action, onPress, bottom }: ToastBarProps) {
   const palette = toneStyle[tone];
   return (
     <Pressable
@@ -37,6 +40,7 @@ export function ToastBar({ message, tone, messageColor, actionHint, onPress, bot
         <Text maxFontSizeMultiplier={textScale.body} style={[styles.message, { color: messageColor ?? palette.label }]}>{message}</Text>
         {actionHint ? <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>{actionHint}</Text> : null}
       </View>
+      {action}
     </Pressable>
   );
 }
@@ -46,12 +50,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: space.lg,
     right: space.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
     borderRadius: radius.lg,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
     ...elevation.float,
   },
   copy: {
+    flex: 1,
     gap: space.xs,
   },
   pressed: {

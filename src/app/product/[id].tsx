@@ -9,6 +9,7 @@ import { BarcodeScanModal } from '@/components/BarcodeScanModal';
 import { CenterCard } from '@/components/CenterCard';
 import { QuantityStepper } from '@/components/QuantityStepper';
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
+import { UndoButton } from '@/components/UndoButton';
 import { useInventory, type BarcodeOpResult } from '@/context/InventoryContext';
 import { formatBarcode } from '@/lib/barcodeFormat';
 import { formatTimestamp } from '@/lib/format';
@@ -17,10 +18,10 @@ import { colors, elevation, press, radius, size, space, state, textScale, type, 
 /** 取码弹窗的用途：新增一个条码，或替换某个已有条码。 */
 type ScanTarget = { mode: 'add' } | { mode: 'edit'; barcode: string };
 
-/** 未置顶时「置顶」图标取统一的中性灰 token。 */
+/** 未置顶时「置顶」图标取统一的暖灰 token。 */
 const PIN_MUTED = colors.pinMuted;
 
-type ToastState = { message: string; tone: ToastTone };
+type ToastState = { message: string; tone: ToastTone; undoLogId?: string };
 
 /** 条码操作失败时的中文提示；成功返回 null，由调用方给出成功文案。 */
 function barcodeFailure(result: BarcodeOpResult): string | null {
@@ -44,7 +45,7 @@ export default function ProductScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const productId = Array.isArray(params.id) ? params.id[0] : params.id;
   const insets = useSafeAreaInsets();
-  const { products, adjustStock, deleteProduct, addBarcode, replaceBarcode, removeBarcode, setPinned } =
+  const { products, adjustStock, undoLog, deleteProduct, addBarcode, replaceBarcode, removeBarcode, setPinned } =
     useInventory();
   const product = products.find((item) => item.id === productId);
   const scrollRef = useRef<ScrollView>(null);
@@ -95,7 +96,15 @@ export default function ProductScreen() {
     };
   }, []);
 
-  const showToast = (message: string, tone: ToastTone) => setToast({ message, tone });
+  const showToast = (message: string, tone: ToastTone, undoLogId?: string) => setToast({ message, tone, undoLogId });
+
+  /** 撤销刚才的库存调整：回退库存并清除那条日志，结果用新的 toast 反馈。 */
+  const handleUndo = async (logId: string) => {
+    const result = await undoLog(logId);
+    showToast(result.ok ? '撤销操作成功' : result.message, result.ok ? 'success' : 'warning');
+  };
+
+  const toastUndoId = toast?.undoLogId;
 
   if (!product) {
     return (
@@ -103,7 +112,7 @@ export default function ProductScreen() {
         <Text style={styles.missingTitle} maxFontSizeMultiplier={textScale.title}>
           未找到该商品
         </Text>
-        <Pressable style={styles.primary} onPress={() => router.back()}>
+        <Pressable style={({ pressed }) => [styles.primary, pressed && styles.pressed]} onPress={() => router.back()}>
           <Text maxFontSizeMultiplier={textScale.body} style={styles.primaryText}>返回库存</Text>
         </Pressable>
       </View>
@@ -133,7 +142,7 @@ export default function ProductScreen() {
       return;
     }
     // 增加走标准深绿成功色；减少改用与「取消置顶」一致的蓝色调（白字），方向一眼可辨。
-    showToast(`库存已更新为 ${result.product.stock}`, delta < 0 ? 'info' : 'success');
+    showToast(`库存已更新为 ${result.product.stock}`, delta < 0 ? 'info' : 'success', result.logId);
   };
 
   /** 按步进器里的数量执行一次增减（数量为 0 时拦截，避免提交空变动）。 */
@@ -379,8 +388,20 @@ export default function ProductScreen() {
         />
       </ScrollView>
 
-      {/* 底部浮动提示：库存增减与条码相关的新增/修改/删除/防呆反馈全部走这里。 */}
-      {toast ? <ToastBar message={toast.message} tone={toast.tone} bottom={insets.bottom + space.xl} /> : null}
+      {/* 底部浮动提示：库存增减与条码相关的新增/修改/删除/防呆反馈全部走这里；
+          库存调整的提示右侧带「撤销」，可在 3 分钟内回退本次操作。 */}
+      {toast ? (
+        <ToastBar
+          message={toast.message}
+          tone={toast.tone}
+          bottom={insets.bottom + space.xl}
+          action={
+            toastUndoId ? (
+              <UndoButton tone="dark" onPress={() => void handleUndo(toastUndoId)} />
+            ) : undefined
+          }
+        />
+      ) : null}
     </View>
   );
 }
@@ -453,8 +474,9 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '45deg' }],
   },
   pinLabel: {
-    // 固定文字槽：容纳三个汉字（字号最多放大到 1.2×），两种状态共用同一个宽度。
-    width: 44,
+    // 固定文字槽：容纳三个汉字（字号最多放大到 1.2×），两种状态共用同一个最小宽度；
+    // 48 比 12×1.2×3 略宽，给 Android 的字体测量偏差留出余量，避免裁掉最后一个字。
+    minWidth: 48,
     textAlign: 'center',
     ...type.caption,
     fontWeight: weight.bold,

@@ -895,14 +895,14 @@ export default function DatabaseScreen() {
         <Text maxFontSizeMultiplier={textScale.body} style={styles.modeHint}>请选择操作方式：</Text>
         <View style={styles.modes}>
           <Pressable
-            style={[styles.mode, importMode === 'merge' && styles.modeActive]}
+            style={({ pressed }) => [styles.mode, importMode === 'merge' && styles.modeActive, pressed && styles.pressed]}
             onPress={() => setImportMode('merge')}
           >
             <Text maxFontSizeMultiplier={textScale.body} style={[styles.modeTitle, importMode === 'merge' && styles.modeTitleActive]}>合并</Text>
             <Text maxFontSizeMultiplier={textScale.body} style={styles.modeText}>保留本机记录，按商品合并条码与库存。</Text>
           </Pressable>
           <Pressable
-            style={[styles.mode, importMode === 'replace' && styles.modeDanger]}
+            style={({ pressed }) => [styles.mode, importMode === 'replace' && styles.modeDanger, pressed && styles.pressed]}
             onPress={() => setImportMode('replace')}
           >
             <Text maxFontSizeMultiplier={textScale.body} style={[styles.modeTitle, importMode === 'replace' && styles.modeDangerTitle]}>覆盖</Text>

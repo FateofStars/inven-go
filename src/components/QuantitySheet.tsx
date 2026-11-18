@@ -3,7 +3,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { QuantityStepper } from '@/components/QuantityStepper';
 import { SheetModal } from '@/components/SheetModal';
-import { colors, radius, size, space, state, textScale, type, weight } from '@/theme';
+import { colors, press, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 type QuantitySheetProps = {
   visible: boolean;
@@ -57,11 +57,15 @@ export function QuantitySheet({
       </ScrollView>
 
       <View style={styles.actions}>
-        <Pressable style={styles.cancel} onPress={onClose} disabled={busy}>
+        <Pressable
+          style={({ pressed }) => [styles.cancel, pressed && !busy && styles.pressed]}
+          onPress={onClose}
+          disabled={busy}
+        >
           <Text maxFontSizeMultiplier={textScale.body} style={styles.cancelText}>取消</Text>
         </Pressable>
         <Pressable
-          style={[styles.confirm, busy && styles.disabled]}
+          style={({ pressed }) => [styles.confirm, busy && styles.disabled, pressed && !busy && styles.pressed]}
           onPress={onConfirm}
           disabled={busy}
           accessibilityState={{ disabled: busy }}
@@ -144,5 +148,9 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: state.disabled,
+  },
+  /** 统一按压反馈。 */
+  pressed: {
+    opacity: press.opacity,
   },
 });

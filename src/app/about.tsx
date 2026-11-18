@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import logo from '../../logo/Invengo-logo.png';
 import { getAppVersion } from '@/constants/appInfo';
-import { colors, elevation, radius, size, space, textScale, type, weight } from '@/theme';
+import { colors, elevation, press, radius, size, space, textScale, type, weight } from '@/theme';
 
 /** 开发者个人主页，点击「开发者：yuan」时交给系统浏览器打开。 */
 const DEVELOPER_HOMEPAGE = 'https://blog.yuansever.top';
@@ -35,7 +35,7 @@ export default function AboutScreen() {
         <TouchableOpacity
           style={styles.pillButton}
           onPress={() => router.push('/changelog')}
-          activeOpacity={0.5}
+          activeOpacity={press.opacity}
           hitSlop={{ top: space.sm, bottom: space.sm, left: space.lg, right: space.lg }}
           accessibilityRole="button"
           accessibilityLabel="更新日志"
@@ -46,7 +46,7 @@ export default function AboutScreen() {
         <TouchableOpacity
           style={styles.pillButton}
           onPress={() => openLink(RELEASE_URL)}
-          activeOpacity={0.5}
+          activeOpacity={press.opacity}
           hitSlop={{ top: space.sm, bottom: space.sm, left: space.lg, right: space.lg }}
           accessibilityRole="link"
           accessibilityLabel="获取最新发布"
@@ -61,7 +61,7 @@ export default function AboutScreen() {
         */}
         <TouchableOpacity
           onPress={() => openLink(DEVELOPER_HOMEPAGE)}
-          activeOpacity={0.5}
+          activeOpacity={press.opacity}
           hitSlop={{ top: space.md, bottom: space.md, left: space.lg, right: space.lg }}
           accessibilityRole="link"
         >

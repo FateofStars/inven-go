@@ -1,5 +1,5 @@
 import { cleanBarcode } from '@/lib/barcodeFormat';
-import type { InventoryDatabase, LogEntry, LogType, Product } from '@/lib/types';
+import type { InventoryDatabase, LogEntry, LogType, Product, UndoInfo } from '@/lib/types';
 
 export const STORAGE_KEY = 'inventory.database.v1';
 const LOG_LIMIT = 2000;
@@ -12,12 +12,13 @@ export function emptyDatabase(): InventoryDatabase {
   return { version: 1, products: [], logs: [] };
 }
 
-export function makeLog(type: LogType, detail: string): LogEntry {
+export function makeLog(type: LogType, detail: string, undo?: UndoInfo): LogEntry {
   return {
     id: createId(),
     type,
     detail,
     timestamp: Date.now(),
+    ...(undo ? { undo } : {}),
   };
 }
 

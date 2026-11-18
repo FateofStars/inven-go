@@ -28,6 +28,7 @@ import {
   type DatabaseSummary,
 } from '@/lib/databases';
 import type { ImportMode, InventoryDatabase, LogEntry, Product } from '@/lib/types';
+import { UNDO_WINDOW_MS } from '@/lib/undo';
 
 type CommitResult<T> = { next: InventoryDatabase; result: T };
 
@@ -38,8 +39,9 @@ export type BindResult =
   | { kind: 'bound' | 'updated'; product: Product }
   | { kind: 'duplicate' }
   | { kind: 'missing-product' };
-export type AdjustResult = { ok: true; product: Product } | { ok: false; message: string };
+export type AdjustResult = { ok: true; product: Product; logId: string } | { ok: false; message: string };
 export type DeleteResult = { ok: true } | { ok: false; message: string };
+export type UndoResult = { ok: true } | { ok: false; message: string };
 export type ImportResult =
   | {
       ok: true;
@@ -95,6 +97,8 @@ type InventoryContextValue = {
   replaceBarcode: (productId: string, previous: string, next: string) => Promise<BarcodeOpResult>;
   removeBarcode: (productId: string, barcode: string) => Promise<BarcodeOpResult>;
   adjustStock: (productId: string, delta: number) => Promise<AdjustResult>;
+  /** 撤销某条日志对应的操作：回退其影响并删除该条日志（仅创建后 3 分钟内有效）。 */
+  undoLog: (logId: string) => Promise<UndoResult>;
   deleteProduct: (productId: string) => Promise<DeleteResult>;
   /** 置顶 / 取消置顶；置顶时自动排到置顶区域末尾。 */
   setPinned: (productId: string, pinned: boolean) => Promise<void>;
@@ -230,7 +234,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: replaceProduct(current.products, index, updated),
             logs: [
               ...current.logs,
-              makeLog('inbound', `入库「${updated.name}」，条码 ${normalized}，库存 ${product.stock} → ${updated.stock}`),
+              makeLog('inbound', `入库「${updated.name}」，条码 ${normalized}，库存 ${product.stock} → ${updated.stock}`, {
+                kind: 'stock',
+                productId: product.id,
+                delta: 1,
+              }),
             ],
           },
           result: { kind: 'updated' as const, product: updated },
@@ -254,7 +262,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: replaceProduct(current.products, index, updated),
             logs: [
               ...current.logs,
-              makeLog('outbound', `出库「${updated.name}」，条码 ${normalized}，库存 ${product.stock} → ${updated.stock}`),
+              makeLog('outbound', `出库「${updated.name}」，条码 ${normalized}，库存 ${product.stock} → ${updated.stock}`, {
+                kind: 'stock',
+                productId: product.id,
+                delta: -1,
+              }),
             ],
           },
           result: { kind: 'updated' as const, product: updated },
@@ -288,7 +300,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: [product, ...current.products],
             logs: [
               ...current.logs,
-              makeLog('create', `新增商品「${product.name}」，条码 ${normalized}，初始库存 ${amount}`),
+              makeLog('create', `新增商品「${product.name}」，条码 ${normalized}，初始库存 ${amount}`, {
+                kind: 'product',
+                productId: product.id,
+                before: null,
+              }),
             ],
           },
           result: { kind: 'created' as const, product },
@@ -321,7 +337,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           next: {
             ...current,
             products: replaceProduct(current.products, index, updated),
-            logs: [...current.logs, makeLog('inbound', detail)],
+            logs: [
+              ...current.logs,
+              makeLog('inbound', detail, { kind: 'product', productId: product.id, before: product }),
+            ],
           },
           result: { kind: alreadyBound ? ('updated' as const) : ('bound' as const), product: updated },
         };
@@ -352,7 +371,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           next: {
             ...current,
             products: replaceProduct(current.products, index, updated),
-            logs: [...current.logs, makeLog('barcode', `更新商品绑定条码：「${updated.name}」新增条码 ${normalized}`)],
+            logs: [
+              ...current.logs,
+              makeLog('barcode', `更新商品绑定条码：「${updated.name}」新增条码 ${normalized}`, {
+                kind: 'product',
+                productId: product.id,
+                before: product,
+              }),
+            ],
           },
           result: { kind: 'ok' as const, product: updated },
         };
@@ -384,7 +410,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           next: {
             ...current,
             products: replaceProduct(current.products, index, updated),
-            logs: [...current.logs, makeLog('barcode', `更新商品绑定条码：「${updated.name}」将 ${from} 修改为 ${to}`)],
+            logs: [
+              ...current.logs,
+              makeLog('barcode', `更新商品绑定条码：「${updated.name}」将 ${from} 修改为 ${to}`, {
+                kind: 'product',
+                productId: product.id,
+                before: product,
+              }),
+            ],
           },
           result: { kind: 'ok' as const, product: updated },
         };
@@ -411,7 +444,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           next: {
             ...current,
             products: replaceProduct(current.products, index, updated),
-            logs: [...current.logs, makeLog('barcode', `更新商品绑定条码：「${updated.name}」删除条码 ${normalized}`)],
+            logs: [
+              ...current.logs,
+              makeLog('barcode', `更新商品绑定条码：「${updated.name}」删除条码 ${normalized}`, {
+                kind: 'product',
+                productId: product.id,
+                before: product,
+              }),
+            ],
           },
           result: { kind: 'ok' as const, product: updated },
         };
@@ -436,13 +476,56 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           applied > 0
             ? `手动入库「${updated.name}」${amount} 件，库存 ${product.stock} → ${updated.stock}`
             : `手动出库「${updated.name}」${amount} 件，库存 ${product.stock} → ${updated.stock}`;
+        const entry = makeLog(applied > 0 ? 'inbound' : 'outbound', detail, {
+          kind: 'stock',
+          productId: product.id,
+          delta: applied,
+        });
         return {
           next: {
             ...current,
             products: replaceProduct(current.products, index, updated),
-            logs: [...current.logs, makeLog(applied > 0 ? 'inbound' : 'outbound', detail)],
+            logs: [...current.logs, entry],
           },
-          result: { ok: true as const, product: updated },
+          result: { ok: true as const, product: updated, logId: entry.id },
+        };
+      }),
+    [commit],
+  );
+
+  const undoLog = useCallback(
+    (logId: string) =>
+      commit<UndoResult>((current) => {
+        const entry = current.logs.find((log) => log.id === logId);
+        if (!entry) return { next: current, result: { ok: false as const, message: '该记录已不存在' } };
+        if (!entry.undo) return { next: current, result: { ok: false as const, message: '该操作不支持撤销' } };
+        if (Date.now() - entry.timestamp > UNDO_WINDOW_MS) {
+          return { next: current, result: { ok: false as const, message: '已超过可撤销时间' } };
+        }
+        const rollback = entry.undo;
+        let products: Product[];
+        if (rollback.kind === 'stock') {
+          const index = current.products.findIndex((product) => product.id === rollback.productId);
+          if (index < 0) return { next: current, result: { ok: false as const, message: '商品已不存在，无法撤销' } };
+          const product = current.products[index];
+          // 只回退本次增减量：期间的其他出入库不受影响，库存不会退成负数。
+          const stock = Math.max(0, product.stock - rollback.delta);
+          products = replaceProduct(current.products, index, { ...product, stock, updatedAt: Date.now() });
+        } else if (rollback.before === null) {
+          if (!current.products.some((product) => product.id === rollback.productId)) {
+            return { next: current, result: { ok: false as const, message: '商品已不存在，无法撤销' } };
+          }
+          // 操作新建了商品：撤销即移除该商品。
+          products = current.products.filter((product) => product.id !== rollback.productId);
+        } else {
+          const restored: Product = { ...rollback.before, barcodes: [...rollback.before.barcodes] };
+          const index = current.products.findIndex((product) => product.id === rollback.productId);
+          products =
+            index < 0 ? [restored, ...current.products] : replaceProduct(current.products, index, restored);
+        }
+        return {
+          next: { ...current, products, logs: current.logs.filter((log) => log.id !== logId) },
+          result: { ok: true as const },
         };
       }),
     [commit],
@@ -460,7 +543,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: current.products.filter((item) => item.id !== productId),
             logs: [
               ...current.logs,
-              makeLog('delete', `删除商品「${product.name}」，条码 ${codes}，删除前库存 ${product.stock}`),
+              makeLog('delete', `删除商品「${product.name}」，条码 ${codes}，删除前库存 ${product.stock}`, {
+                kind: 'product',
+                productId: product.id,
+                before: product,
+              }),
             ],
           },
           result: { ok: true as const },
@@ -714,6 +801,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     replaceBarcode,
     removeBarcode,
     adjustStock,
+    undoLog,
     deleteProduct,
     setPinned,
     reorderPinned,

@@ -1,14 +1,17 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import EmptyState from '@/components/EmptyState';
+import { ToastBar, type ToastTone } from '@/components/ToastBar';
+import { UndoButton } from '@/components/UndoButton';
 import { useInventory } from '@/context/InventoryContext';
 import { formatBarcodeInText } from '@/lib/barcodeFormat';
 import { formatTimestamp } from '@/lib/format';
 import { type LogEntry, type LogType } from '@/lib/types';
+import { formatUndoCountdown, undoRemaining } from '@/lib/undo';
 import { colors, elevation, press, radius, size, space, textScale, type, weight } from '@/theme';
 
 /**
@@ -59,17 +62,42 @@ function rangeStart(range: TimeRange): number {
 }
 
 export default function LogsScreen() {
-  const { logs } = useInventory();
+  const { logs, undoLog } = useInventory();
   const insets = useSafeAreaInsets();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<LogType | 'all'>('all');
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
+  const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
+  /** 当前时刻：驱动撤销倒计时刷新，到期后对应日志的撤销区自动收起。 */
+  const [now, setNow] = useState(() => Date.now());
   const listRef = useRef<FlatList<LogEntry>>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2400);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  // 只存在可撤销日志时才逐秒心跳；全部到期后立刻停表，列表不再无谓重渲染。
+  const hasUndoable = useMemo(() => logs.some((entry) => undoRemaining(entry, now) > 0), [logs, now]);
+
+  useEffect(() => {
+    if (!hasUndoable) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [hasUndoable]);
+
+  const handleUndo = async (logId: string) => {
+    const result = await undoLog(logId);
+    setToast({ message: result.ok ? '撤销操作成功' : result.message, tone: result.ok ? 'success' : 'warning' });
+  };
 
   // 离开本 Tab 时收起筛选面板并清空全部筛选条件，切回时直接是完整日志流水。
   useFocusEffect(
     useCallback(() => {
+      // 回到本页先对齐一次时钟，避免展示早已过期的撤销入口。
+      setNow(Date.now());
       return () => {
         setSearchOpen(false);
         setQuery('');
@@ -131,7 +159,7 @@ export default function LogsScreen() {
               />
               {query.length > 0 ? (
                 <Pressable
-                  style={styles.searchClear}
+                  style={({ pressed }) => [styles.searchClear, pressed && styles.pressed]}
                   onPress={() => setQuery('')}
                   accessibilityLabel="清空搜索"
                 >
@@ -139,7 +167,11 @@ export default function LogsScreen() {
                 </Pressable>
               ) : null}
             </View>
-            <Pressable style={styles.cancel} onPress={closeSearch} hitSlop={space.md}>
+            <Pressable
+              style={({ pressed }) => [styles.cancel, pressed && styles.pressed]}
+              onPress={closeSearch}
+              hitSlop={space.md}
+            >
               <Text maxFontSizeMultiplier={textScale.body} style={styles.cancelText}>取消</Text>
             </Pressable>
           </>
@@ -176,7 +208,11 @@ export default function LogsScreen() {
           <View style={styles.panelHead}>
             <Text maxFontSizeMultiplier={textScale.body} style={styles.panelTitle}>操作类型</Text>
             {filtering ? (
-              <Pressable hitSlop={space.lg} onPress={reset}>
+              <Pressable
+                hitSlop={space.lg}
+                style={({ pressed }) => (pressed ? styles.pressed : undefined)}
+                onPress={reset}
+              >
                 <Text maxFontSizeMultiplier={textScale.body} style={styles.reset}>重置筛选</Text>
               </Pressable>
             ) : null}
@@ -215,6 +251,7 @@ export default function LogsScreen() {
         style={styles.list}
         contentContainerStyle={styles.content}
         data={visible}
+        extraData={now}
         keyExtractor={(item) => item.id}
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
@@ -234,8 +271,10 @@ export default function LogsScreen() {
             />
           )
         }
-        renderItem={({ item }) => <LogRow entry={item} />}
+        renderItem={({ item }) => <LogRow entry={item} now={now} onUndo={handleUndo} />}
       />
+
+      {toast ? <ToastBar message={toast.message} tone={toast.tone} bottom={space.xl} /> : null}
     </View>
   );
 }
@@ -253,20 +292,32 @@ function FilterChip({ label, active, onPress }: { label: string; active: boolean
   );
 }
 
-function LogRow({ entry }: { entry: LogEntry }) {
+function LogRow({ entry, now, onUndo }: { entry: LogEntry; now: number; onUndo: (logId: string) => void }) {
   const palette = tone[entry.type];
+  const remaining = undoRemaining(entry, now);
   return (
     <View style={styles.row}>
-      <View style={[styles.iconWrap, { backgroundColor: palette.soft }]}>
-        <MaterialCommunityIcons name={palette.icon} size={22} color={palette.color} />
-      </View>
-      <View style={styles.body}>
-        <View style={styles.rowHead}>
-          <Text maxFontSizeMultiplier={textScale.body} style={[styles.badge, { color: palette.text }]}>{typeLabel(entry.type)}</Text>
-          <Text maxFontSizeMultiplier={textScale.body} style={styles.time}>{formatTimestamp(entry.timestamp)}</Text>
+      <View style={styles.rowMain}>
+        <View style={[styles.iconWrap, { backgroundColor: palette.soft }]}>
+          <MaterialCommunityIcons name={palette.icon} size={22} color={palette.color} />
         </View>
-        <Text maxFontSizeMultiplier={textScale.body} style={styles.detail}>{formatBarcodeInText(entry.detail)}</Text>
+        <View style={styles.body}>
+          <View style={styles.rowHead}>
+            <Text maxFontSizeMultiplier={textScale.body} style={[styles.badge, { color: palette.text }]}>{typeLabel(entry.type)}</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.time}>{formatTimestamp(entry.timestamp)}</Text>
+          </View>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.detail}>{formatBarcodeInText(entry.detail)}</Text>
+        </View>
       </View>
+      {/* 可撤销时卡片向下延伸一块：左侧倒计时、右下角撤销按钮，到期后整块收起。 */}
+      {remaining > 0 ? (
+        <View style={styles.undoBar}>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.countdown}>
+            {`可在 ${formatUndoCountdown(remaining)} 内撤销操作`}
+          </Text>
+          <UndoButton onPress={() => void onUndo(entry.id)} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -417,12 +468,32 @@ const styles = StyleSheet.create({
     paddingBottom: space.xl,
   },
   row: {
-    flexDirection: 'row',
-    gap: space.md,
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     padding: space.lg,
     ...elevation.card,
+  },
+  rowMain: {
+    flexDirection: 'row',
+    gap: space.md,
+  },
+  /** 撤销区：细分割线之上，左倒计时、右按钮，让卡片在可撤销期间自然向下延伸。 */
+  undoBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+    marginTop: space.md,
+    paddingTop: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+  },
+  countdown: {
+    flexShrink: 1,
+    color: colors.muted,
+    ...type.caption,
+    fontWeight: weight.regular,
+    fontVariant: ['tabular-nums'],
   },
   iconWrap: {
     width: size.iconTile,

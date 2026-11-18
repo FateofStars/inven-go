@@ -13,11 +13,22 @@ export type Product = {
   pinOrder?: number;
 };
 
+/**
+ * 可撤销操作的回滚信息，随日志一起落盘，仅在创建后的限时窗口内有效。
+ * - `stock`：只回退库存增减，不覆盖期间发生的其他改动；
+ * - `product`：用操作前的商品快照整体覆盖；`before` 为 null 表示操作新建了商品，撤销即删除。
+ */
+export type UndoInfo =
+  | { kind: 'stock'; productId: string; delta: number }
+  | { kind: 'product'; productId: string; before: Product | null };
+
 export type LogEntry = {
   id: string;
   type: LogType;
   detail: string;
   timestamp: number;
+  /** 可撤销操作的回滚信息；导入的备份日志不携带该字段。 */
+  undo?: UndoInfo;
 };
 
 export type InventoryDatabase = {
