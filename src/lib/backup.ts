@@ -1,5 +1,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { EncodingType, readAsStringAsync } from 'expo-file-system/legacy';
+import { gzip, ungzip } from 'pako';
 
 import { parseDatabase } from '@/lib/database';
 import { DEFAULT_DATABASE_ID } from '@/lib/databases';
@@ -45,6 +46,21 @@ function pad(value: number): string {
 function snapshotFileName(date: Date): string {
   const ymd = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   return `backup_${ymd}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}.json`;
+}
+
+/**
+ * 系统分享导出的文件名：`[数据库名称]_backup_YYYY-MM-DD_HH-mm-ss.json.gz`。
+ * 数据库名称里的非法文件名字符统一替换成下划线，避免写入缓存失败。
+ */
+export function exportFileName(databaseName: string, date: Date = new Date()): string {
+  const safe = databaseName.replace(/[\\/:*?"<>|]/g, '_').trim() || 'inventory';
+  const ymd = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${safe}_backup_${ymd}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}.json.gz`;
+}
+
+/** 把导出的 JSON 明文压成 gzip 二进制：重复字段极多，通常能省下 80%~90% 的体积。 */
+export function gzipBackupText(text: string): Uint8Array {
+  return gzip(text);
 }
 
 /** 从文件名反解出创建时间（精确到秒），并兼容旧版仅到分钟的文件名。 */
@@ -142,11 +158,20 @@ export function clearSnapshots(databaseId: string): void {
   }
 }
 
-export function readSnapshotText(uri: string): Promise<string> {
-  return new File(uri).text();
+export function readSnapshotText(uri: string, name?: string): Promise<string> {
+  return readBackupText(uri, name);
 }
 
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/** gzip 文件头魔数：1f 8b。二进制流只要以它开头就一定需要解压。 */
+function looksGzipped(bytes: Uint8Array): boolean {
+  return bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+}
+
+function hasGzExtension(name?: string): boolean {
+  return typeof name === 'string' && name.toLowerCase().endsWith('.gz');
+}
 
 function base64ToBytes(base64: string): Uint8Array {
   const clean = base64.replace(/[^A-Za-z0-9+/]/g, '');
@@ -168,9 +193,8 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes.subarray(0, byteIndex);
 }
 
-/** 把 base64 还原成 UTF-8 字符串（不依赖 atob / TextDecoder，Hermes 上同样可用）。 */
-function decodeBase64Utf8(base64: string): string {
-  const bytes = base64ToBytes(base64);
+/** 把 UTF-8 字节还原成字符串（不依赖 atob / TextDecoder，Hermes 上同样可用）。 */
+function decodeBytesUtf8(bytes: Uint8Array): string {
   const chunks: string[] = [];
   let index = 0;
   while (index < bytes.length) {
@@ -222,5 +246,36 @@ export async function readPickedText(uri: string): Promise<string> {
   } catch {
     // 降级到下一层
   }
-  return decodeBase64Utf8(await readAsStringAsync(uri, { encoding: EncodingType.Base64 }));
+  return decodeBytesUtf8(base64ToBytes(await readAsStringAsync(uri, { encoding: EncodingType.Base64 })));
+}
+
+/** 读取原始字节：先走新 API，再降级到 legacy base64，失败返回 null。 */
+async function readFileBytes(uri: string): Promise<Uint8Array | null> {
+  try {
+    return await new File(uri).bytes();
+  } catch {
+    // 降级到 legacy 读取
+  }
+  try {
+    return base64ToBytes(await readAsStringAsync(uri, { encoding: EncodingType.Base64 }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 读取备份文件并自适应解压：
+ * - gzip 二进制流（或扩展名为 .gz）→ pako.ungzip 还原出 JSON 明文；
+ * - 普通 .json 文本 → 直接按 UTF-8 解码。
+ */
+export async function readBackupText(uri: string, name?: string): Promise<string> {
+  const bytes = await readFileBytes(uri);
+  if (bytes) {
+    if (looksGzipped(bytes) || hasGzExtension(name)) {
+      return ungzip(bytes, { to: 'string' });
+    }
+    return decodeBytesUtf8(bytes);
+  }
+  // 拿不到字节时退回纯文本通道，至少兼容原本的 .json 备份。
+  return readPickedText(uri);
 }

@@ -153,6 +153,19 @@ export const state = {
 } as const;
 
 /**
+ * 宽屏（平板）适配的布局上限。
+ * 手机端全部不生效；平板竖屏时把内容收进中心列，避免手机布局被拉伸。
+ */
+export const layout = {
+  /** 页面内容区的最大宽度：卡片列表、首页标题与底部操作条共用。 */
+  maxContentWidth: 720,
+  /** 长文与更新日志的最大行宽，保证阅读 measure 落在舒适区间。 */
+  proseMaxWidth: 640,
+  /** 底部面板在平板上的最大宽度。 */
+  sheetMaxWidth: 560,
+} as const;
+
+/**
  * 系统字号放大的上限。
  *
  * RN 的 allowFontScaling 只放大 fontSize，不放大 lineHeight：固定行高的大字号文本

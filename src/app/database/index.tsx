@@ -21,18 +21,39 @@ import { CenterCard } from '@/components/CenterCard';
 import EmptyState from '@/components/EmptyState';
 import { PillRow } from '@/components/PillRow';
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
+import { UpdatingModal, type UpgradeStatus } from '@/components/UpdatingModal';
 import { useInventory } from '@/context/InventoryContext';
-import { listSnapshots, readPickedText, readSnapshotText, saveSnapshot, type Snapshot } from '@/lib/backup';
-import { parseDatabase } from '@/lib/database';
+import {
+  exportFileName,
+  gzipBackupText,
+  listSnapshots,
+  readBackupText,
+  readSnapshotText,
+  saveSnapshot,
+  type Snapshot,
+} from '@/lib/backup';
+import { DATABASE_SCHEMA_VERSION, NEWER_BACKUP_MESSAGE, inspectDatabase } from '@/lib/database';
 import { latestActivity, validateDatabaseName, type DatabaseSummary } from '@/lib/databases';
 import { formatTimestamp } from '@/lib/format';
-import type { ImportMode, InventoryDatabase } from '@/lib/types';
+import { migrateLegacyLogs } from '@/lib/logMigration';
+import type { ImportMode, InventoryDatabase, LogEntry } from '@/lib/types';
 import { colors, elevation, press, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 /** 重置全部数据库必须精准输入的确认词（区分大小写）。 */
 const CLEAR_CONFIRM_WORD = 'Yes';
 
-type BusyState = 'switch' | 'export' | 'clipboard' | 'import' | 'name' | 'delete' | 'reset' | null;
+type BusyState =
+  | 'switch'
+  | 'export'
+  | 'clipboard'
+  | 'import'
+  | 'name'
+  | 'delete'
+  | 'reset'
+  | 'upgrade'
+  | 'upgradeShare'
+  | 'upgradeCopy'
+  | null;
 
 /** 新建 / 修改名称两种用途共用同一个表单弹窗。 */
 type NameDialog = { mode: 'create' } | { mode: 'rename'; entry: DatabaseSummary };
@@ -51,6 +72,26 @@ type PreImport = {
   /** 备份里最后一条商品/日志的时间，用于展示统计。 */
   updatedAt: number;
 };
+
+/**
+ * 「数据库更新」的升级产物：
+ * - active：当前激活库，只需把清洗后的日志写回本机；
+ * - archive：外部备份，不落库，确认后走导出流程把升级后的数据包交还给用户。
+ */
+type UpgradeResult =
+  | { kind: 'active'; logs: LogEntry[] }
+  | { kind: 'archive'; data: InventoryDatabase; source: string };
+
+/** 从来源文件名推导导出文件名主体：去掉扩展名与旧的 backup 时间戳后缀。 */
+function archiveDisplayName(source: string): string {
+  return (
+    source
+      .replace(/\.json\.gz$/i, '')
+      .replace(/\.(json|gz)$/i, '')
+      .replace(/_backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/i, '')
+      .trim() || '数据库备份'
+  );
+}
 
 type ToastState = {
   message: string;
@@ -71,6 +112,8 @@ export default function DatabaseScreen() {
     resetDatabases,
     exportDatabase,
     importDatabase,
+    snapshotActiveDatabase,
+    applyMigratedLogs,
   } = useInventory();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
@@ -107,6 +150,18 @@ export default function DatabaseScreen() {
   const [cardHeight, setCardHeight] = useState(0);
   const [busy, setBusy] = useState<BusyState>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+
+  /** 「数据库更新」：目标选择 → 处理中 / 已完成 → （外部备份）导出，都用独立弹窗承载。 */
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeImportOpen, setUpgradeImportOpen] = useState(false);
+  const [upgradeTextOpen, setUpgradeTextOpen] = useState(false);
+  const [upgradeTextValue, setUpgradeTextValue] = useState('');
+  const [upgradeTextError, setUpgradeTextError] = useState<string | null>(null);
+  const [upgradeStatus, setUpgradeStatus] = useState<UpgradeStatus | null>(null);
+  const [upgradeResult, setUpgradeResult] = useState<UpgradeResult | null>(null);
+  const [upgradeExportOpen, setUpgradeExportOpen] = useState(false);
+  /** 每次处理自增；用户取消后 token 失配，迟到的异步结果会被直接丢弃。 */
+  const upgradeToken = useRef(0);
 
   useEffect(() => {
     if (!toast) return;
@@ -248,16 +303,17 @@ export default function DatabaseScreen() {
     setToast(null);
     try {
       const text = await buildExportText(entry);
-      const file = new File(Paths.cache, `inventory-${Date.now()}.json`);
-      file.write(text);
+      // 分享通道走 gzip 二进制：商品与日志字段高度重复，压缩比通常能达到 80%~90%。
+      const file = new File(Paths.cache, exportFileName(entry.name));
+      file.write(gzipBackupText(text));
       if (!(await Sharing.isAvailableAsync())) {
         showToast('本机不支持系统分享，可改用「复制 JSON 到剪贴板」。', 'info');
         return;
       }
       await Sharing.shareAsync(file.uri, {
-        mimeType: 'application/json',
+        mimeType: 'application/gzip',
         dialogTitle: `导出数据库：${entry.name}`,
-        UTI: 'public.json',
+        UTI: 'org.gnu.gnu-zip-archive',
       });
       closeTarget();
       showToast(`已导出数据库：${entry.name}`, 'success');
@@ -339,12 +395,18 @@ export default function DatabaseScreen() {
       setTextError('请先粘贴备份 JSON 文本。');
       return;
     }
-    const parsed = parseDatabase(raw);
-    if (!parsed) {
+    const inspected = inspectDatabase(raw);
+    if (!inspected.ok) {
+      if (inspected.reason === 'newer-version') {
+        // 高版本数据无法降级读取：关掉弹窗后用黄色警告明确拦住，避免用户反复尝试。
+        closeTarget();
+        showToast(NEWER_BACKUP_MESSAGE, 'warning');
+        return;
+      }
       setTextError('内容不是可识别的库存数据库，请检查 JSON 是否完整。');
       return;
     }
-    acceptParsed('剪贴板文本', raw, parsed);
+    acceptParsed('剪贴板文本', raw, inspected.database);
   };
 
   /** 入口 B：系统文件选择器。 */
@@ -366,17 +428,21 @@ export default function DatabaseScreen() {
       }
       let text: string;
       try {
-        text = await readPickedText(picked.assets[0].uri);
+        // 自动识别 .json / .json.gz：gzip 二进制会先解压成 JSON 明文再解析。
+        text = await readBackupText(picked.assets[0].uri, picked.assets[0].name);
       } catch {
         showToast('无法读取所选文件。可改用「从剪贴板文本导入」或本机快照。', 'warning');
         return;
       }
-      const parsed = parseDatabase(text);
-      if (!parsed) {
-        showToast('所选文件不是可识别的库存数据库。', 'warning');
+      const inspected = inspectDatabase(text);
+      if (!inspected.ok) {
+        showToast(
+          inspected.reason === 'newer-version' ? NEWER_BACKUP_MESSAGE : '所选文件不是可识别的库存数据库。',
+          'warning',
+        );
         return;
       }
-      acceptParsed(picked.assets[0].name ?? '本地文件', text, parsed);
+      acceptParsed(picked.assets[0].name ?? '本地文件', text, inspected.database);
     } catch (error) {
       showToast(error instanceof Error ? error.message : '导入失败', 'warning');
     } finally {
@@ -390,18 +456,22 @@ export default function DatabaseScreen() {
     setBusy('import');
     setToast(null);
     try {
-      const text = await readSnapshotText(snapshot.uri);
-      const parsed = parseDatabase(text);
-      if (!parsed) {
-        showToast('该快照已损坏，无法读取。', 'warning');
+      const text = await readSnapshotText(snapshot.uri, snapshot.name);
+      // 先关掉选择弹窗：成功时切换到确认弹窗，失败时让 Toast 不被 Modal 遮住。
+      setImportOpen(false);
+      const inspected = inspectDatabase(text);
+      if (!inspected.ok) {
+        showToast(
+          inspected.reason === 'newer-version' ? NEWER_BACKUP_MESSAGE : '该快照已损坏，无法读取。',
+          'warning',
+        );
         return;
       }
-      setImportOpen(false);
       setPending({
         source: `本机快照 ${snapshot.name}`,
         raw: text,
-        productCount: parsed.products.length,
-        logCount: parsed.logs.length,
+        productCount: inspected.database.products.length,
+        logCount: inspected.database.logs.length,
       });
     } catch {
       showToast('读取快照失败。', 'warning');
@@ -482,6 +552,214 @@ export default function DatabaseScreen() {
   };
 
   const onlyOne = databases.length <= 1;
+
+  /** 当前激活库名称，用于「数据库更新」里的目标说明。 */
+  const activeName = databases.find((item) => item.id === activeDatabaseId)?.name ?? '默认数据库';
+
+  /** 统一的「处理中 → 已完成」状态流转；token 失配说明用户已取消，结果直接丢弃。 */
+  const runUpgrade = async (produce: () => UpgradeResult) => {
+    const token = upgradeToken.current + 1;
+    upgradeToken.current = token;
+    setUpgradeResult(null);
+    setUpgradeStatus('processing');
+    // 先让处理中弹窗完成一帧渲染，再执行同步清洗，避免大库在无反馈时卡住界面。
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const result = produce();
+    // 清洗本身很快，保留短暂的处理态，让状态流转可被感知。
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    if (upgradeToken.current !== token) return;
+    setUpgradeResult(result);
+    setUpgradeStatus('completed');
+  };
+
+  /** 取消：处理中即终止流程；完成态即放弃本次更新。 */
+  const cancelUpgrade = () => {
+    upgradeToken.current += 1;
+    setUpgradeStatus(null);
+    setUpgradeResult(null);
+  };
+
+  const closeUpgradeExport = () => {
+    setUpgradeExportOpen(false);
+    setUpgradeResult(null);
+    setUpgradeStatus(null);
+  };
+
+  /** 路径一：升级当前激活库。处理前先在本机留一份快照，异常时可秒级还原。 */
+  const handleUpgradeActive = () => {
+    setUpgradeOpen(false);
+    setToast(null);
+    try {
+      const snapshot = snapshotActiveDatabase();
+      saveSnapshot(activeDatabaseId, snapshot);
+      void runUpgrade(() => ({ kind: 'active', logs: migrateLegacyLogs(snapshot.logs) }));
+    } catch {
+      showToast('前置快照保存失败，已取消本次更新。', 'warning');
+    }
+  };
+
+  /** 路径二：把外部备份整包升级，不写入本机任何数据库。 */
+  const startArchiveUpgrade = (data: InventoryDatabase, source: string) => {
+    setUpgradeImportOpen(false);
+    setUpgradeTextOpen(false);
+    void runUpgrade(() => ({
+      kind: 'archive',
+      data: {
+        version: DATABASE_SCHEMA_VERSION,
+        products: data.products,
+        logs: migrateLegacyLogs(data.logs),
+      },
+      source,
+    }));
+  };
+
+  /** 打开裁剪版导入弹窗：只保留文件与剪贴板两个通道。 */
+  const handleUpgradeArchive = () => {
+    setUpgradeOpen(false);
+    setToast(null);
+    setUpgradeImportOpen(true);
+  };
+
+  const handleUpgradePickFile = async () => {
+    if (busy) return;
+    setUpgradeImportOpen(false);
+    setBusy('import');
+    setToast(null);
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        // 与正式导入一致：放开类型限制，避免部分 ROM 因 MIME 过滤给出不可读的虚拟 URI。
+        type: '*/*',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (picked.canceled || !picked.assets[0]) {
+        showToast('已取消选择文件。', 'info');
+        return;
+      }
+      let text: string;
+      try {
+        text = await readBackupText(picked.assets[0].uri, picked.assets[0].name);
+      } catch {
+        showToast('无法读取所选文件。可改用「从剪贴板粘贴文本」。', 'warning');
+        return;
+      }
+      const inspected = inspectDatabase(text);
+      if (!inspected.ok) {
+        showToast(
+          inspected.reason === 'newer-version' ? NEWER_BACKUP_MESSAGE : '所选文件不是可识别的库存数据库。',
+          'warning',
+        );
+        return;
+      }
+      startArchiveUpgrade(inspected.database, picked.assets[0].name ?? '本地文件');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '读取失败', 'warning');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** 入口：读取剪贴板并填入裁剪版粘贴弹窗。 */
+  const handleUpgradePasteEntry = async () => {
+    setUpgradeImportOpen(false);
+    setUpgradeTextError(null);
+    setUpgradeTextValue('');
+    setUpgradeTextOpen(true);
+    try {
+      const clip = await Clipboard.getStringAsync();
+      setUpgradeTextValue(clip);
+      if (!clip.trim()) setUpgradeTextError('剪贴板里没有文本，请在下方粘贴备份 JSON。');
+    } catch {
+      setUpgradeTextError('读取剪贴板失败，请在下方手动粘贴备份 JSON。');
+    }
+  };
+
+  const handleUpgradeValidateText = () => {
+    const raw = upgradeTextValue.trim();
+    if (!raw) {
+      setUpgradeTextError('请先粘贴备份 JSON 文本。');
+      return;
+    }
+    const inspected = inspectDatabase(raw);
+    if (!inspected.ok) {
+      if (inspected.reason === 'newer-version') {
+        setUpgradeTextOpen(false);
+        showToast(NEWER_BACKUP_MESSAGE, 'warning');
+        return;
+      }
+      setUpgradeTextError('内容不是可识别的库存数据库，请检查 JSON 是否完整。');
+      return;
+    }
+    startArchiveUpgrade(inspected.database, '剪贴板文本');
+  };
+
+  /** 完成态的主操作：活跃库写回本机；外部备份进入裁剪版导出弹窗。 */
+  const handleApplyUpgrade = async () => {
+    const result = upgradeResult;
+    if (!result || busy) return;
+    if (result.kind === 'archive') {
+      setUpgradeStatus(null);
+      setUpgradeExportOpen(true);
+      return;
+    }
+    setBusy('upgrade');
+    setToast(null);
+    try {
+      await applyMigratedLogs(result.logs);
+      setUpgradeStatus(null);
+      setUpgradeResult(null);
+      await refreshDatabases();
+      showToast('当前数据库已成功升级为最新格式', 'success');
+    } catch (error) {
+      // 保留完成态弹窗，用户可重试或取消，避免在半途状态里丢掉明确入口。
+      showToast(error instanceof Error ? error.message : '写入数据库失败，请重试', 'warning');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleUpgradeShare = async () => {
+    const result = upgradeResult;
+    if (!result || result.kind !== 'archive' || busy) return;
+    setBusy('upgradeShare');
+    setToast(null);
+    try {
+      const text = JSON.stringify(result.data, null, 2);
+      const file = new File(Paths.cache, exportFileName(archiveDisplayName(result.source)));
+      file.write(gzipBackupText(text));
+      if (!(await Sharing.isAvailableAsync())) {
+        showToast('本机不支持系统分享，可改用「复制 JSON 到剪贴板」。', 'info');
+        return;
+      }
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/gzip',
+        dialogTitle: '导出升级后的数据库',
+        UTI: 'org.gnu.gnu-zip-archive',
+      });
+      closeUpgradeExport();
+      showToast('已导出升级后的数据库', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '导出失败', 'warning');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleUpgradeCopy = async () => {
+    const result = upgradeResult;
+    if (!result || result.kind !== 'archive' || busy) return;
+    setBusy('upgradeCopy');
+    setToast(null);
+    try {
+      await Clipboard.setStringAsync(JSON.stringify(result.data, null, 2));
+      closeUpgradeExport();
+      showToast('已复制升级后的数据库到剪贴板', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '复制失败', 'warning');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -628,6 +906,28 @@ export default function DatabaseScreen() {
 
         <Text maxFontSizeMultiplier={textScale.body} style={styles.hint}>右滑卡片可导入或导出该库的备份，左滑可改名或删除。</Text>
 
+        <Text maxFontSizeMultiplier={textScale.body} style={[styles.sectionTitle, styles.sectionTitleSpaced]}>数据维护</Text>
+        <Pressable
+          style={({ pressed }) => [styles.card, styles.cardOffset, pressed && styles.cardPressed]}
+          onPress={() => {
+            setToast(null);
+            setUpgradeOpen(true);
+          }}
+          accessibilityLabel="数据库更新"
+        >
+          <View style={[styles.cardIcon, { backgroundColor: colors.navySoft }]}>
+            <MaterialCommunityIcons name="sync-circle" size={22} color={colors.navy} />
+          </View>
+          <View style={styles.cardBody}>
+            <Text maxFontSizeMultiplier={textScale.body} style={[styles.cardTitle, { color: colors.navyStrong }]}>
+              数据库更新
+            </Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={styles.cardText}>
+              将数据库旧的日志存储格式升级为新标准，优化存储体积
+            </Text>
+          </View>
+        </Pressable>
+
         <Text maxFontSizeMultiplier={textScale.body} style={[styles.sectionTitle, styles.sectionTitleSpaced]}>危险操作</Text>
         <Pressable
           style={({ pressed }) => [styles.card, styles.cardOffset, pressed && styles.cardPressed]}
@@ -702,6 +1002,143 @@ export default function DatabaseScreen() {
       </CenterCard>
 
       <CenterCard
+        visible={upgradeOpen}
+        title="数据库更新"
+        description="选择需要升级为新存储格式的数据库目标"
+        cancelLabel="关闭"
+        showConfirm={false}
+        cardMaxHeight="88%"
+        onCancel={() => setUpgradeOpen(false)}
+        onConfirm={() => setUpgradeOpen(false)}
+      >
+        <View style={styles.rows}>
+          <UpgradeOption
+            icon="database"
+            title="更新正在使用的数据库"
+            text={`当前激活库：${activeName}`}
+            badge="当前生效"
+            onPress={handleUpgradeActive}
+          />
+          <UpgradeOption
+            icon="file-sync-outline"
+            title="更新已导出的数据库"
+            text="从 .json 或 .json.gz 备份文件、剪贴板读取"
+            onPress={handleUpgradeArchive}
+          />
+        </View>
+      </CenterCard>
+
+      <CenterCard
+        visible={upgradeImportOpen}
+        title="更新已导出的数据库"
+        description="请选择或粘贴需要升级的历史数据库备份文件"
+        cancelLabel="关闭"
+        showConfirm={false}
+        cardMaxHeight="88%"
+        onCancel={() => setUpgradeImportOpen(false)}
+        onConfirm={() => setUpgradeImportOpen(false)}
+      >
+        <View style={styles.rows}>
+          <PillRow
+            compact
+            icon="file-document-outline"
+            color={colors.teal}
+            titleColor={colors.tealStrong}
+            soft={colors.tealSoft}
+            title="从手机文件选择"
+            text="支持 .json 和 .json.gz"
+            busy={busy === 'import'}
+            disabled={busy !== null}
+            onPress={() => void handleUpgradePickFile()}
+          />
+          <PillRow
+            compact
+            icon="content-paste"
+            color={colors.navy}
+            titleColor={colors.navyStrong}
+            soft={colors.navySoft}
+            title="从剪贴板粘贴文本"
+            text="自动读取剪贴板，也可手动粘贴 JSON"
+            disabled={busy !== null}
+            onPress={() => void handleUpgradePasteEntry()}
+          />
+        </View>
+      </CenterCard>
+
+      <CenterCard
+        visible={upgradeTextOpen}
+        title="粘贴备份数据"
+        description="已尝试读取剪贴板。确认无误后开始升级。"
+        confirmLabel="开始更新"
+        confirmDisabled={upgradeTextValue.trim().length === 0}
+        onCancel={() => setUpgradeTextOpen(false)}
+        onConfirm={handleUpgradeValidateText}
+      >
+        <Pressable
+          style={({ pressed }) => [styles.clipboardButton, pressed && styles.pressed]}
+          onPress={() => void handleUpgradePasteEntry()}
+        >
+          <MaterialCommunityIcons name="content-paste" size={18} color={colors.navy} />
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.clipboardButtonText}>重新读取剪贴板</Text>
+        </Pressable>
+        <TextInput
+          value={upgradeTextValue}
+          onChangeText={(value) => {
+            setUpgradeTextValue(value);
+            setUpgradeTextError(null);
+          }}
+          placeholder='在此粘贴 {"version":1,"products":[...],"logs":[...]}'
+          placeholderTextColor={colors.muted}
+          style={styles.textArea}
+          maxFontSizeMultiplier={textScale.body}
+          multiline
+          textAlignVertical="top"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {upgradeTextError ? <Text maxFontSizeMultiplier={textScale.body} style={styles.fieldError}>{upgradeTextError}</Text> : null}
+      </CenterCard>
+
+      <CenterCard
+        visible={upgradeExportOpen}
+        title="导出数据库"
+        description="数据库已成功升级为最新格式，请选择导出方式保存到本地"
+        cancelLabel="关闭"
+        showConfirm={false}
+        showScrollIndicator
+        cardMaxHeight="88%"
+        onCancel={closeUpgradeExport}
+        onConfirm={closeUpgradeExport}
+      >
+        <View style={styles.rows}>
+          <PillRow
+            compact
+            icon="share-variant-outline"
+            color={colors.teal}
+            titleColor={colors.tealStrong}
+            soft={colors.tealSoft}
+            title="通过系统分享导出"
+            text="自动输出 .json.gz 压缩包"
+            busy={busy === 'upgradeShare'}
+            disabled={busy !== null}
+            onPress={() => void handleUpgradeShare()}
+          />
+          <PillRow
+            compact
+            icon="content-copy"
+            color={colors.navy}
+            titleColor={colors.navyStrong}
+            soft={colors.navySoft}
+            title="复制 JSON 到剪贴板"
+            text="粘贴到任意聊天或备忘录即可备份"
+            busy={busy === 'upgradeCopy'}
+            disabled={busy !== null}
+            onPress={() => void handleUpgradeCopy()}
+          />
+        </View>
+      </CenterCard>
+
+      <CenterCard
         visible={exportOpen}
         title="导出数据库"
         description="导出数据库，并在该数据库下保留一份快照（最多 5 份）。"
@@ -733,7 +1170,7 @@ export default function DatabaseScreen() {
             titleColor={colors.tealStrong}
             soft={colors.tealSoft}
             title="通过系统分享导出"
-            text="生成 JSON 文件并交给系统分享"
+            text="生成 .json.gz 压缩包并交给系统分享"
             busy={busy === 'export'}
             disabled={busy !== null}
             onPress={() => void handleShareExport()}
@@ -793,7 +1230,7 @@ export default function DatabaseScreen() {
             titleColor={colors.tealStrong}
             soft={colors.tealSoft}
             title="从手机文件导入"
-            text="调起系统文件管理器选择 JSON"
+            text="选择 .json 或 .json.gz 备份文件"
             busy={busy === 'import'}
             disabled={busy !== null}
             onPress={() => void handlePickFile()}
@@ -866,7 +1303,7 @@ export default function DatabaseScreen() {
             setTextValue(value);
             setTextError(null);
           }}
-          placeholder='在此粘贴 {"version":1,"products":[...],"logs":[...]}'
+          placeholder='在此粘贴 {"version":2,"products":[...],"logs":[...]}'
           placeholderTextColor={colors.muted}
           style={styles.textArea}
           maxFontSizeMultiplier={textScale.body}
@@ -959,6 +1396,14 @@ export default function DatabaseScreen() {
         <Text maxFontSizeMultiplier={textScale.body} style={styles.confirmHint}>区分大小写，需精准输入 {CLEAR_CONFIRM_WORD} 才能点击确认重置。</Text>
       </CenterCard>
 
+      <UpdatingModal
+        visible={upgradeStatus !== null}
+        status={upgradeStatus ?? 'processing'}
+        showBackupNotice={upgradeResult?.kind === 'active'}
+        onCancel={cancelUpgrade}
+        onApply={() => void handleApplyUpgrade()}
+      />
+
       {toast ? (
         <ToastBar
           message={toast.message}
@@ -978,6 +1423,44 @@ function DatabaseBanner({ name }: { name: string }) {
       <MaterialCommunityIcons name="database" size={15} color={colors.green} />
       <Text maxFontSizeMultiplier={textScale.body} numberOfLines={1} style={styles.bannerText}>{`当前操作数据库：【${name}】`}</Text>
     </View>
+  );
+}
+
+type UpgradeOptionProps = {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  title: string;
+  text: string;
+  /** 当前激活库等需要强调的标识。 */
+  badge?: string;
+  onPress: () => void;
+};
+
+/** 「数据库更新」主弹窗里的目标选择卡片：卡片质感与页面列表保持一致。 */
+function UpgradeOption({ icon, title, text, badge, onPress }: UpgradeOptionProps) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.optionCard, pressed && styles.cardPressed]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+    >
+      <View style={[styles.cardIcon, { backgroundColor: colors.navySoft }]}>
+        <MaterialCommunityIcons name={icon} size={22} color={colors.navy} />
+      </View>
+      <View style={styles.cardBody}>
+        <View style={styles.optionHead}>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.optionTitle}>{title}</Text>
+          {badge ? (
+            <View style={styles.optionBadge}>
+              <MaterialCommunityIcons name="check-circle" size={12} color={colors.greenStrong} />
+              <Text maxFontSizeMultiplier={textScale.body} style={styles.optionBadgeText}>{badge}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text maxFontSizeMultiplier={textScale.body} style={styles.cardText}>{text}</Text>
+      </View>
+      <MaterialCommunityIcons name="chevron-right" size={20} color={colors.muted} />
+    </Pressable>
   );
 }
 
@@ -1020,13 +1503,13 @@ function PreloadCard({ preload, disabled, onPress }: PreloadCardProps) {
         </Text>
         {preload ? (
           <>
-            <Text maxFontSizeMultiplier={textScale.body} style={styles.cardText}>
+            <Text maxFontSizeMultiplier={textScale.body} style={[styles.cardText, { color: accent }]}>
               {`包含 ${preload.data.products.length} 个商品 · ${preload.data.logs.length} 条日志 · 最后更新 ${formatTimestamp(preload.updatedAt)}`}
             </Text>
-            <Text maxFontSizeMultiplier={textScale.body} style={styles.cardText}>再次点击可以重新导入</Text>
+            <Text maxFontSizeMultiplier={textScale.body} style={[styles.cardText, { color: accent }]}>再次点击可以重新导入</Text>
           </>
         ) : (
-          <Text maxFontSizeMultiplier={textScale.body} style={styles.cardText}>选择现有备份直接填充新建库（可选）</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={[styles.cardText, { color: accent }]}>选择现有备份直接填充新建库（可选）</Text>
         )}
       </View>
     </Pressable>
@@ -1235,6 +1718,43 @@ const styles = StyleSheet.create({
   },
   rows: {
     gap: space.sm,
+  },
+  /** 「数据库更新」主弹窗的目标选择卡：与页面卡片同一套圆角、阴影与内边距。 */
+  optionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+    ...elevation.card,
+  },
+  optionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: space.sm,
+  },
+  optionTitle: {
+    flexShrink: 1,
+    color: colors.ink,
+    ...type.title,
+    fontWeight: weight.bold,
+  },
+  optionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    height: type.caption.lineHeight + space.xs,
+    backgroundColor: colors.greenSoft,
+    borderRadius: radius.sm,
+    paddingHorizontal: space.sm,
+  },
+  optionBadgeText: {
+    color: colors.greenStrong,
+    ...type.caption,
+    fontWeight: weight.bold,
   },
   banner: {
     flexDirection: 'row',

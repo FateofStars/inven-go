@@ -162,7 +162,12 @@ export function AddProductModal({
                   }}
                 >
                   <Text maxFontSizeMultiplier={textScale.body} style={styles.optionTitle}>{product.name}</Text>
-                  <Text maxFontSizeMultiplier={textScale.body} style={styles.optionMeta}>库存 {product.stock} · {product.barcodes.length} 个条码</Text>
+                  <Text
+                    maxFontSizeMultiplier={textScale.body}
+                    style={[styles.optionMeta, active && styles.optionMetaActive]}
+                  >
+                    库存 {product.stock} · {product.barcodes.length} 个条码
+                  </Text>
                 </Pressable>
               );
             })}
@@ -322,6 +327,10 @@ const styles = StyleSheet.create({
     color: colors.muted,
     ...type.caption,
     fontWeight: weight.regular,
+  },
+  /** 选中行是 tealSoft 底：次级文字改用同色相深档，避免灰字落在彩色面上。 */
+  optionMetaActive: {
+    color: colors.tealStrong,
   },
   listEmpty: {
     paddingHorizontal: space.md,

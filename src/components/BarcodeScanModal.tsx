@@ -1,4 +1,5 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
+import { StatusBar } from 'expo-status-bar';
 import { useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -103,6 +104,8 @@ export function BarcodeScanModal({ title, hint, replaceFrom, onCancel, onSubmit 
     // 对比面板升起时，系统返回键先收起面板，而不是直接退出扫码页。
     <Modal visible transparent animationType="slide" onRequestClose={() => (pendingReplace !== null ? cancelReplace() : onCancel())}>
       <View style={styles.screen}>
+        {/* 取景弹窗铺满全屏且底色为深色，状态栏图标同步切浅色。 */}
+        <StatusBar style="light" />
         {granted ? (
           <>
             <CameraView

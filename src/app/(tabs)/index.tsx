@@ -22,7 +22,7 @@ import HandDrawnArrow from '@/components/HandDrawnArrow';
 import { ToastBar, type ToastTone } from '@/components/ToastBar';
 import { useInventory } from '@/context/InventoryContext';
 import type { Product } from '@/lib/types';
-import { colors, elevation, press, radius, size, space, state, textScale, type, weight } from '@/theme';
+import { colors, elevation, layout, press, radius, size, space, state, textScale, type, weight } from '@/theme';
 
 /**
  * 首页三个扫描入口各自保留一种识别色，颜色只出现在图标底块与标签上。
@@ -104,9 +104,12 @@ export default function InventoryScreen() {
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
   const [actionBarHeight, setActionBarHeight] = useState(ACTION_BAR_HEIGHT);
   // 取整避免两列宽度之和与容器差出亚像素，导致 flexWrap 意外换行。
-  const cardWidth = Math.floor((width - LIST_PADDING * 2 - CARD_GAP) / 2);
+  // 平板等宽屏下内容收进中心列：列宽按内容上限计算，不再随屏幕无限拉伸。
+  const contentWidth = Math.min(width, layout.maxContentWidth);
+  const sideInset = (width - contentWidth) / 2;
+  const cardWidth = Math.floor((contentWidth - LIST_PADDING * 2 - CARD_GAP) / 2);
   // 引导区整体右移，让文字左缘与箭头图片左缘对齐，同时箭尖仍落在第一个按钮中心。
-  const calloutOffset = Math.max(0, (width - LIST_PADDING * 2) / 6 - ARROW_TIP_X);
+  const calloutOffset = Math.max(0, (contentWidth - LIST_PADDING * 2) / 6 - ARROW_TIP_X);
 
   const rootRef = useRef<View>(null);
   const listRef = useRef<FlatList<Product>>(null);
@@ -495,7 +498,14 @@ export default function InventoryScreen() {
       {products.length === 0 && !hasKeyword ? (
         <View
           pointerEvents="none"
-          style={[styles.callout, { bottom: actionBarHeight + ACTION_BAR_GAP + space.xs }]}
+          style={[
+            styles.callout,
+            {
+              left: sideInset + LIST_PADDING,
+              right: sideInset + LIST_PADDING,
+              bottom: actionBarHeight + ACTION_BAR_GAP + space.xs,
+            },
+          ]}
         >
           <View style={{ paddingLeft: calloutOffset }}>
             <HandDrawnArrow width={ARROW_WIDTH} height={ARROW_HEIGHT} />
@@ -698,6 +708,10 @@ const styles = StyleSheet.create({
     gap: space.md,
     paddingHorizontal: space.lg,
     paddingBottom: space.md,
+    // 与下方列表共用同一条中心列，平板上的标题不会贴到屏幕最左。
+    width: '100%',
+    maxWidth: layout.maxContentWidth,
+    alignSelf: 'center',
   },
   titleWrap: {
     flex: 1,
@@ -763,6 +777,9 @@ const styles = StyleSheet.create({
   },
   listWrap: {
     flex: 1,
+    width: '100%',
+    maxWidth: layout.maxContentWidth,
+    alignSelf: 'center',
   },
   list: {
     flexGrow: 1,
@@ -796,7 +813,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: colors.placeholderLine,
+    borderColor: colors.muted,
     backgroundColor: colors.bg,
   },
   placeholderContent: {
@@ -917,6 +934,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
   },
   actionBar: {
+    width: '100%',
+    // 与卡片左右边缘对齐：外层已留 16 边距，这里再按内容上限收窄。
+    maxWidth: layout.maxContentWidth - space.lg * 2,
+    alignSelf: 'center',
     backgroundColor: colors.card,
     borderRadius: radius.xl,
     ...elevation.float,
@@ -962,8 +983,6 @@ const styles = StyleSheet.create({
   /** 空仓库引导：贴在操作条上方，文字左对齐、箭头单独对准第一个按钮。 */
   callout: {
     position: 'absolute',
-    left: LIST_PADDING,
-    right: LIST_PADDING,
   },
   calloutText: {
     position: 'absolute',

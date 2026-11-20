@@ -10,7 +10,7 @@ import { UndoButton } from '@/components/UndoButton';
 import { useInventory } from '@/context/InventoryContext';
 import { formatBarcodeInText } from '@/lib/barcodeFormat';
 import { formatTimestamp } from '@/lib/format';
-import { type LogEntry, type LogType } from '@/lib/types';
+import { formatLogDetail, type LogEntry, type LogType } from '@/lib/types';
 import { formatUndoCountdown, undoRemaining } from '@/lib/undo';
 import { colors, elevation, press, radius, size, space, textScale, type, weight } from '@/theme';
 
@@ -118,7 +118,7 @@ export default function LogsScreen() {
         (entry) =>
           (typeFilter === 'all' || entry.type === typeFilter) &&
           entry.timestamp >= from &&
-          (keyword === '' || entry.detail.toLowerCase().includes(keyword)),
+          (keyword === '' || formatLogDetail(entry).toLowerCase().includes(keyword)),
       );
   }, [logs, query, typeFilter, timeRange]);
 
@@ -306,7 +306,7 @@ function LogRow({ entry, now, onUndo }: { entry: LogEntry; now: number; onUndo: 
             <Text maxFontSizeMultiplier={textScale.body} style={[styles.badge, { color: palette.text }]}>{typeLabel(entry.type)}</Text>
             <Text maxFontSizeMultiplier={textScale.body} style={styles.time}>{formatTimestamp(entry.timestamp)}</Text>
           </View>
-          <Text maxFontSizeMultiplier={textScale.body} style={styles.detail}>{formatBarcodeInText(entry.detail)}</Text>
+          <Text maxFontSizeMultiplier={textScale.body} style={styles.detail}>{formatBarcodeInText(formatLogDetail(entry))}</Text>
         </View>
       </View>
       {/* 可撤销时卡片向下延伸一块：左侧倒计时、右下角撤销按钮，到期后整块收起。 */}

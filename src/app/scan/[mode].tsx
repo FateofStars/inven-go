@@ -1,5 +1,6 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -381,6 +382,8 @@ export default function ScanScreen() {
 
   return (
     <View style={styles.screen}>
+      {/* 深色取景画面之上用浅色状态栏图标，避免全局深色图标在相机画面上不可读。 */}
+      <StatusBar style="light" />
       <CameraView
         style={StyleSheet.absoluteFill}
         facing="back"

@@ -4,12 +4,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { clearSnapshots } from '@/lib/backup';
 import { cleanBarcode } from '@/lib/barcodeFormat';
 import {
+  DATABASE_SCHEMA_VERSION,
+  NEWER_BACKUP_MESSAGE,
   createId,
   emptyDatabase,
   findProductByBarcode,
+  inspectDatabase,
   makeLog,
   mergeDatabases,
-  parseDatabase,
   trimLogs,
 } from '@/lib/database';
 import {
@@ -108,6 +110,10 @@ type InventoryContextValue = {
   exportDatabase: (includeLogs?: boolean, databaseId?: string) => Promise<InventoryDatabase>;
   /** 把备份导入指定数据库（默认当前激活库）。 */
   importDatabase: (raw: string, mode: ImportMode, databaseId?: string) => Promise<ImportResult>;
+  /** 当前激活库的完整数据快照（只读），用于「数据库更新」升级前自动留底。 */
+  snapshotActiveDatabase: () => InventoryDatabase;
+  /** 用迁移后的日志覆盖当前激活库，商品等其他数据保持不变。 */
+  applyMigratedLogs: (logs: LogEntry[]) => Promise<void>;
 };
 
 const InventoryContext = createContext<InventoryContextValue | null>(null);
@@ -187,7 +193,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           const current = previous ?? (await readDatabaseData(databaseId));
           const { next, result } = recipe(current);
           const trimmed: InventoryDatabase = {
-            version: 1,
+            version: DATABASE_SCHEMA_VERSION,
             products: next.products,
             logs: trimLogs(next.logs),
           };
@@ -234,11 +240,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: replaceProduct(current.products, index, updated),
             logs: [
               ...current.logs,
-              makeLog('inbound', `入库「${updated.name}」，条码 ${normalized}，库存 ${product.stock} → ${updated.stock}`, {
-                kind: 'stock',
-                productId: product.id,
-                delta: 1,
-              }),
+              makeLog(
+                'inbound',
+                { name: updated.name, barcode: normalized, stock: product.stock, nextStock: updated.stock },
+                { kind: 'stock', productId: product.id, delta: 1 },
+              ),
             ],
           },
           result: { kind: 'updated' as const, product: updated },
@@ -262,11 +268,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: replaceProduct(current.products, index, updated),
             logs: [
               ...current.logs,
-              makeLog('outbound', `出库「${updated.name}」，条码 ${normalized}，库存 ${product.stock} → ${updated.stock}`, {
-                kind: 'stock',
-                productId: product.id,
-                delta: -1,
-              }),
+              makeLog(
+                'outbound',
+                { name: updated.name, barcode: normalized, stock: product.stock, nextStock: updated.stock },
+                { kind: 'stock', productId: product.id, delta: -1 },
+              ),
             ],
           },
           result: { kind: 'updated' as const, product: updated },
@@ -300,11 +306,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: [product, ...current.products],
             logs: [
               ...current.logs,
-              makeLog('create', `新增商品「${product.name}」，条码 ${normalized}，初始库存 ${amount}`, {
-                kind: 'product',
-                productId: product.id,
-                before: null,
-              }),
+              makeLog(
+                'create',
+                { name: product.name, barcode: normalized, stock: amount },
+                { kind: 'product', productId: product.id, before: null },
+              ),
             ],
           },
           result: { kind: 'created' as const, product },
@@ -330,16 +336,18 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           stock: product.stock + amount,
           updatedAt: Date.now(),
         };
-        const detail = alreadyBound
-          ? `入库「${updated.name}」，条码 ${normalized}，库存 ${product.stock} → ${updated.stock}`
-          : `商品「${updated.name}」绑定条码 ${normalized} 并入库 ${amount} 件，库存 ${product.stock} → ${updated.stock}`;
+        const baseParams = { name: updated.name, barcode: normalized, amount, stock: product.stock, nextStock: updated.stock };
         return {
           next: {
             ...current,
             products: replaceProduct(current.products, index, updated),
             logs: [
               ...current.logs,
-              makeLog('inbound', detail, { kind: 'product', productId: product.id, before: product }),
+              makeLog(
+                'inbound',
+                alreadyBound ? baseParams : { ...baseParams, mode: 'bind' },
+                { kind: 'product', productId: product.id, before: product },
+              ),
             ],
           },
           result: { kind: alreadyBound ? ('updated' as const) : ('bound' as const), product: updated },
@@ -373,11 +381,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: replaceProduct(current.products, index, updated),
             logs: [
               ...current.logs,
-              makeLog('barcode', `更新商品绑定条码：「${updated.name}」新增条码 ${normalized}`, {
-                kind: 'product',
-                productId: product.id,
-                before: product,
-              }),
+              makeLog(
+                'barcode',
+                { action: 'add', name: updated.name, barcode: normalized },
+                { kind: 'product', productId: product.id, before: product },
+              ),
             ],
           },
           result: { kind: 'ok' as const, product: updated },
@@ -412,11 +420,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: replaceProduct(current.products, index, updated),
             logs: [
               ...current.logs,
-              makeLog('barcode', `更新商品绑定条码：「${updated.name}」将 ${from} 修改为 ${to}`, {
-                kind: 'product',
-                productId: product.id,
-                before: product,
-              }),
+              makeLog(
+                'barcode',
+                { action: 'replace', name: updated.name, from, to },
+                { kind: 'product', productId: product.id, before: product },
+              ),
             ],
           },
           result: { kind: 'ok' as const, product: updated },
@@ -446,11 +454,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: replaceProduct(current.products, index, updated),
             logs: [
               ...current.logs,
-              makeLog('barcode', `更新商品绑定条码：「${updated.name}」删除条码 ${normalized}`, {
-                kind: 'product',
-                productId: product.id,
-                before: product,
-              }),
+              makeLog(
+                'barcode',
+                { action: 'remove', name: updated.name, barcode: normalized },
+                { kind: 'product', productId: product.id, before: product },
+              ),
             ],
           },
           result: { kind: 'ok' as const, product: updated },
@@ -472,15 +480,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         if (applied === 0) return { next: current, result: { ok: false as const, message: '库存已为 0，无法继续减少' } };
         const updated: Product = { ...product, stock: product.stock + applied, updatedAt: Date.now() };
         const amount = Math.abs(applied);
-        const detail =
-          applied > 0
-            ? `手动入库「${updated.name}」${amount} 件，库存 ${product.stock} → ${updated.stock}`
-            : `手动出库「${updated.name}」${amount} 件，库存 ${product.stock} → ${updated.stock}`;
-        const entry = makeLog(applied > 0 ? 'inbound' : 'outbound', detail, {
-          kind: 'stock',
-          productId: product.id,
-          delta: applied,
-        });
+        const entry = makeLog(
+          applied > 0 ? 'inbound' : 'outbound',
+          {
+            mode: 'manual',
+            name: updated.name,
+            amount,
+            stock: product.stock,
+            nextStock: updated.stock,
+          },
+          { kind: 'stock', productId: product.id, delta: applied },
+        );
         return {
           next: {
             ...current,
@@ -543,11 +553,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             products: current.products.filter((item) => item.id !== productId),
             logs: [
               ...current.logs,
-              makeLog('delete', `删除商品「${product.name}」，条码 ${codes}，删除前库存 ${product.stock}`, {
-                kind: 'product',
-                productId: product.id,
-                before: product,
-              }),
+              makeLog(
+                'delete',
+                { name: product.name, barcodes: codes, stock: product.stock },
+                { kind: 'product', productId: product.id, before: product },
+              ),
             ],
           },
           result: { ok: true as const },
@@ -599,36 +609,47 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const { result: entry, next } = await commitTo(
         databaseId ?? registryRef.current.activeId,
         (current) => {
-          const detail = includeLogs
-            ? `导出数据库，商品 ${current.products.length} 个，日志 ${current.logs.length + 1} 条`
-            : `导出数据库（不含日志），商品 ${current.products.length} 个`;
-          const created = makeLog('export', detail);
+          const params = includeLogs
+            ? { productCount: current.products.length, logCount: current.logs.length + 1, includeLogs: true }
+            : { productCount: current.products.length, includeLogs: false };
+          const created = makeLog('export', params);
           return { next: { ...current, logs: [...current.logs, created] }, result: created };
         },
       );
       if (includeLogs) {
-        return { version: 1, products: next.products, logs: next.logs };
+        return { version: DATABASE_SCHEMA_VERSION, products: next.products, logs: next.logs };
       }
       // 不含日志时只保留本次导出这一条记录，保证因果闭环又不夹带历史流水。
-      return { version: 1, products: next.products, logs: [entry], includeLogs: false };
+      return { version: DATABASE_SCHEMA_VERSION, products: next.products, logs: [entry], includeLogs: false };
     },
     [commitTo],
   );
 
   const importDatabase = useCallback(
     (raw: string, mode: ImportMode, databaseId?: string) => {
-      const parsed = parseDatabase(raw);
-      if (!parsed) return Promise.resolve({ ok: false as const, message: '文件内容不是可识别的库存数据库' });
+      const inspected = inspectDatabase(raw);
+      if (!inspected.ok) {
+        return Promise.resolve({
+          ok: false as const,
+          message: inspected.reason === 'newer-version' ? NEWER_BACKUP_MESSAGE : '文件内容不是可识别的库存数据库',
+        });
+      }
+      const parsed = inspected.database;
       return commitTo(databaseId ?? registryRef.current.activeId, (current) => {
-        const base =
+        const base: InventoryDatabase =
           mode === 'replace'
-            ? { version: 1 as const, products: parsed.products, logs: parsed.logs }
+            ? { version: DATABASE_SCHEMA_VERSION, products: parsed.products, logs: parsed.logs }
             : mergeDatabases(current, parsed);
         const detail =
           mode === 'replace'
             ? `覆盖导入数据库，商品 ${base.products.length} 个，历史日志 ${base.logs.length} 条`
             : `合并导入数据库，商品 ${base.products.length} 个，日志 ${base.logs.length} 条`;
-        const next = { ...base, logs: [...base.logs, makeLog('import', detail)] };
+        const params = {
+          mode,
+          productCount: base.products.length,
+          logCount: base.logs.length,
+        };
+        const next = { ...base, logs: [...base.logs, makeLog('import', params)] };
         return {
           next,
           result: {
@@ -642,6 +663,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }).then((outcome) => outcome.result);
     },
     [commitTo],
+  );
+
+  const snapshotActiveDatabase = useCallback(() => snapshotRef.current, []);
+
+  const applyMigratedLogs = useCallback(
+    (logs: LogEntry[]) =>
+      commit<void>((current) => ({
+        next: { ...current, logs: trimLogs(logs) },
+        result: undefined,
+      })),
+    [commit],
   );
 
   const refreshDatabases = useCallback(async () => {
@@ -676,7 +708,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const entry: DatabaseEntry = { id: createId(), name: check.name, createdAt: Date.now() };
         // 传了初始数据（新建时的预导入）就以它作为新库的起点，否则建一个空库。
         const data: InventoryDatabase = initialData
-          ? { version: 1, products: initialData.products, logs: trimLogs(initialData.logs) }
+          ? { version: DATABASE_SCHEMA_VERSION, products: initialData.products, logs: trimLogs(initialData.logs) }
           : emptyDatabase();
         await AsyncStorage.setItem(dataKey(entry.id), JSON.stringify(data));
         const next: DatabaseRegistry = { ...current, items: [...current.items, entry] };
@@ -807,6 +839,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     reorderPinned,
     exportDatabase,
     importDatabase,
+    snapshotActiveDatabase,
+    applyMigratedLogs,
   };
 
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;

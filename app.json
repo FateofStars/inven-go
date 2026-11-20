@@ -2,7 +2,7 @@
   "expo": {
     "name": "Inven Go",
     "slug": "inven-go",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./logo/Invengo-logo.png",
     "userInterfaceStyle": "light",
@@ -14,7 +14,7 @@
       "package": "com.yuan.invengo",
       "adaptiveIcon": {
         "foregroundImage": "./logo/Invengo-logo-adaptive.png",
-        "backgroundColor": "#FAF7F2",
+        "backgroundColor": "#F3EFE6",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
@@ -46,7 +46,7 @@
           "image": "./logo/Invengo-logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#FAF7F2"
+          "backgroundColor": "#F3EFE6"
         }
       ]
     ],

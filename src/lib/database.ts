@@ -1,23 +1,30 @@
 import { cleanBarcode } from '@/lib/barcodeFormat';
-import type { InventoryDatabase, LogEntry, LogType, Product, UndoInfo } from '@/lib/types';
+import type { InventoryDatabase, LogEntry, LogParams, LogType, Product, UndoInfo } from '@/lib/types';
 
 export const STORAGE_KEY = 'inventory.database.v1';
 const LOG_LIMIT = 2000;
+
+/** 备份文件的数据结构版本：v2 起日志改为结构化 params 存储。 */
+export const DATABASE_SCHEMA_VERSION = 2;
+
+/** 导入高版本备份时的统一提示，界面与数据层共用同一句文案。 */
+export const NEWER_BACKUP_MESSAGE = '该备份来自更高版本的应用，请升级 Inven Go 后再导入';
 
 export function createId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export function emptyDatabase(): InventoryDatabase {
-  return { version: 1, products: [], logs: [] };
+  return { version: DATABASE_SCHEMA_VERSION, products: [], logs: [] };
 }
 
-export function makeLog(type: LogType, detail: string, undo?: UndoInfo): LogEntry {
+/** 新日志只保存结构化参数，展示文案由 {@link formatLogDetail} 统一生成。 */
+export function makeLog(type: LogType, params: LogParams, undo?: UndoInfo): LogEntry {
   return {
     id: createId(),
     type,
-    detail,
     timestamp: Date.now(),
+    params,
     ...(undo ? { undo } : {}),
   };
 }
@@ -40,7 +47,8 @@ function isLogType(value: unknown): value is LogType {
     value === 'create' ||
     value === 'delete' ||
     value === 'import' ||
-    value === 'export'
+    value === 'export' ||
+    value === 'barcode'
   );
 }
 
@@ -77,35 +85,62 @@ function readProduct(value: unknown): Product | null {
   return product;
 }
 
+/** 只接受纯对象形式的参数，数组 / null / 基本类型都视为无效。 */
+function readLogParams(value: unknown): LogParams | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return { ...(value as LogParams) };
+}
+
 function readLog(value: unknown): LogEntry | null {
   if (!value || typeof value !== 'object') return null;
   const record = value as Record<string, unknown>;
-  if (typeof record.id !== 'string' || typeof record.detail !== 'string' || !isLogType(record.type)) return null;
-  return {
+  if (typeof record.id !== 'string' || !isLogType(record.type)) return null;
+  const params = readLogParams(record.params);
+  const detail = typeof record.detail === 'string' ? record.detail : undefined;
+  // v2 的参数日志与 v1 的纯文本日志都合法，两者皆无才视为脏数据。
+  if (!params && detail === undefined) return null;
+  const entry: LogEntry = {
     id: record.id,
     type: record.type,
-    detail: record.detail,
     timestamp: typeof record.timestamp === 'number' ? record.timestamp : Date.now(),
   };
+  if (params) entry.params = params;
+  if (detail !== undefined) entry.detail = detail;
+  return entry;
 }
 
-export function parseDatabase(raw: string): InventoryDatabase | null {
+export type DatabaseParseResult =
+  | { ok: true; database: InventoryDatabase }
+  | { ok: false; reason: 'invalid' | 'newer-version' };
+
+/**
+ * 解析备份 / 本地存储：同时兼容 v1（纯文本日志）与 v2（结构化参数日志），
+ * 并拦截高于当前版本的数据，避免降级使用旧应用时把新字段悄悄丢掉。
+ */
+export function inspectDatabase(raw: string): DatabaseParseResult {
   try {
     const data = JSON.parse(raw) as unknown;
-    if (!data || typeof data !== 'object') return null;
+    if (!data || typeof data !== 'object') return { ok: false, reason: 'invalid' };
     const record = data as Record<string, unknown>;
-    if (!Array.isArray(record.products) || !Array.isArray(record.logs)) return null;
+    const version = typeof record.version === 'number' ? record.version : 1;
+    if (version > DATABASE_SCHEMA_VERSION) return { ok: false, reason: 'newer-version' };
+    if (!Array.isArray(record.products) || !Array.isArray(record.logs)) return { ok: false, reason: 'invalid' };
     const parsed: InventoryDatabase = {
-      version: 1,
+      version: DATABASE_SCHEMA_VERSION,
       products: record.products.map(readProduct).filter((product): product is Product => product !== null),
       logs: record.logs.map(readLog).filter((entry): entry is LogEntry => entry !== null),
     };
     // 旧版备份没有这个字段，只在明确传入布尔值时才保留，避免污染老文件语义。
     if (typeof record.includeLogs === 'boolean') parsed.includeLogs = record.includeLogs;
-    return parsed;
+    return { ok: true, database: parsed };
   } catch {
-    return null;
+    return { ok: false, reason: 'invalid' };
   }
+}
+
+export function parseDatabase(raw: string): InventoryDatabase | null {
+  const result = inspectDatabase(raw);
+  return result.ok ? result.database : null;
 }
 
 export function trimLogs(logs: LogEntry[]): LogEntry[] {
@@ -162,5 +197,5 @@ export function mergeDatabases(local: InventoryDatabase, incoming: InventoryData
     seen.add(log.id);
   }
 
-  return { version: 1, products, logs };
+  return { version: DATABASE_SCHEMA_VERSION, products, logs };
 }

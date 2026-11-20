@@ -13,7 +13,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { colors, elevation, radius, space } from '@/theme';
+import { colors, elevation, layout, radius, space } from '@/theme';
 
 /** 面板跟随键盘升起/落下的时长；安卓拿不到系统的键盘动画时长，用观感接近的固定值。 */
 const LIFT_DURATION_MS = 180;
@@ -139,6 +139,10 @@ const styles = StyleSheet.create({
   sheet: {
     // 可用高度不足时先收缩面板自身，把空间让给面板内部的滚动区。
     flexShrink: 1,
+    width: '100%',
+    // 平板等宽屏下不再铺满整宽，收进居中的面板内。
+    maxWidth: layout.sheetMaxWidth,
+    alignSelf: 'center',
     backgroundColor: colors.card,
     borderTopLeftRadius: radius.sheet,
     borderTopRightRadius: radius.sheet,

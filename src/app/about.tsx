@@ -10,7 +10,7 @@ import { colors, elevation, press, radius, size, space, textScale, type, weight 
 /** 开发者个人主页，点击「开发者：yuan」时交给系统浏览器打开。 */
 const DEVELOPER_HOMEPAGE = 'https://blog.yuansever.top';
 /** GitHub Release 发布页，点击「获取最新发布」时打开。 */
-const RELEASE_URL = 'https://github.com/FateofStars/inven-go/releases';
+const RELEASE_URL = 'https://github.com/FateofStars/inven-go/releases/latest';
 const CREDITS = 'Deepseek-v4.1-Flash、Gemini-3.8-Flash、GPT-image-2.5-sunburst';
 
 export default function AboutScreen() {
